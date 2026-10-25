@@ -7,11 +7,19 @@ must have a completed/stop final response and must still run every stage gate.
 """
 import hashlib
 import json
+import math
 import re
 
 
 def _finite_json_constant(value):
     raise ValueError('non-finite JSON constant: ' + value)
+
+
+def _finite_json_float(text):
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError('overflowing JSON number')
+    return value
 
 
 def trim_completed_root_suffix(text):
@@ -28,7 +36,7 @@ def trim_completed_root_suffix(text):
     if start >= len(text) or text[start] != '{':
         return None
     decoder = json.JSONDecoder(object_pairs_hook=unique_object,
-                               parse_constant=_finite_json_constant)
+                               parse_constant=_finite_json_constant, parse_float=_finite_json_float)
     try:
         value, end = decoder.raw_decode(text, start)
     except (ValueError, RecursionError):
