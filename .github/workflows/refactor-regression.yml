@@ -1,0 +1,52 @@
+name: Classic refactor regression
+on:
+  push:
+    branches: [refactor/langgraph-latency-observability]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: classic-refactor-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEEPSEEK_API_KEY: ''
+      LANGSMITH_API_KEY: ''
+      LANGSMITH_TRACING: 'false'
+      LANGCHAIN_TRACING_V2: 'false'
+      MATH_AGENT_BROWSER_TEST: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check deployment, prompts, tools and V2 are untouched
+        run: >-
+          git diff --exit-code d23b43549e5a897a6e348da130b546c6f10b80db --
+          Dockerfile compose.yaml deploy/ .env.example constraints.txt
+          math_agent/api.py math_agent/cli.py
+          math_agent/prompts.py
+          math_agent/tools.py math_agent/jsxgraph/ math_agent/web/
+      - name: Install locked dependencies
+        run: python -m pip install -c constraints.txt -e '.[test]'
+      - name: Install real browser and isolated Redis executable
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server
+          python -m playwright install --with-deps chromium
+      - name: Run regression and fixed-baseline equivalence (no paid model calls)
+        run: python -m pytest -q --junitxml=test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: classic-refactor-tests
+          path: test-results.xml
+          if-no-files-found: ignore
+          retention-days: 7

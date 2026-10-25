@@ -1,5 +1,6 @@
 """Answer-assisted LangGraph: verify mathematics once, freeze it, draw and review separately."""
 from __future__ import annotations
+from .execution_limits import repair_allowed, graph_limit
 import copy
 import hashlib
 import json
@@ -148,7 +149,7 @@ def execute_reference_graph(runner):
         return {'review':value,'next':END if value.verdict=='pass' else 'repair','feedback':[i.model_dump() for i in value.issues]}
     def repair(state):
         count=state.get('repairs',0)
-        if count>=runner.settings.max_repairs:raise ValueError('修复预算用完，未发布网页：'+str(state['feedback'])[:1800])
+        if not repair_allowed(runner.settings,count):raise ValueError('修复预算用完，未发布网页：'+str(state['feedback'])[:1800])
         stages={i['stage'] for i in state['feedback']}
         dest='source' if 'source' in stages else 'reference_math' if 'math' in stages else 'draw_patch'
         runner.audit('repair',{'stage':dest,'attempt':count+1,'feedback':state['feedback']})
@@ -163,4 +164,4 @@ def execute_reference_graph(runner):
     graph.add_conditional_edges('graph_review',lambda s:s['next'],{'repair':'repair',END:END})
     graph.add_conditional_edges('repair',lambda s:s['next'],{n:n for n in ['source','reference_math','draw_patch']})
     compiled=graph.compile();(runner.directory/'agent-graph.mmd').write_text(compiled.get_graph().draw_mermaid())
-    with tracing_context(enabled=False):return compiled.invoke({'repairs':0,'feedback':[]},{'recursion_limit':12+runner.settings.max_repairs*8,'callbacks':[]})
+    with tracing_context(enabled=False):return compiled.invoke({'repairs':0,'feedback':[]},{'recursion_limit':graph_limit(runner.settings,12+runner.settings.max_repairs*8),'callbacks':[]})

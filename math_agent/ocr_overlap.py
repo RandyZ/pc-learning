@@ -6,7 +6,9 @@ from concurrent.futures import ThreadPoolExecutor,TimeoutError
 
 class PendingOCR:
     def __init__(self,settings,request,directory,audit,deadline,recognize):
-        self.deadline=deadline
+        from .execution_limits import validation
+        # An explicitly requested evaluation deadline is enforced by the Worker.
+        self.deadline=None if validation(settings) else deadline
         self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='math-ocr')
         self.audit=audit
         self.future=self.pool.submit(recognize,settings,copy.deepcopy(request),directory,audit)
@@ -14,7 +16,7 @@ class PendingOCR:
         audit('ocr_overlap',{'status':'started','detail':'OCR与原图模型读取并行；结果必须在复核和发布前取得，失败不得跳过'})
 
     def result(self):
-        try:value=self.future.result(timeout=max(0,self.deadline-time.monotonic()))
+        try:value=self.future.result(timeout=None if self.deadline is None else max(0,self.deadline-time.monotonic()))
         except TimeoutError:raise RuntimeError('整题截止前OCR未完成，不能复核或发布；未自动重发') from None
         if not self.joined:
             self.joined=True

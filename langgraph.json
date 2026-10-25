@@ -1,0 +1,5 @@
+{
+  "dependencies": ["."],
+  "graphs": {"classic": "./debug/classic_studio.py:make_graph"},
+  "env": ".env.debug"
+}

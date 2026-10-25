@@ -27,6 +27,8 @@ def supervise(settings, store, job_id, stop, heartbeat, command=None):
     command = command or [sys.executable, "-m", "math_agent.cli", "run-job", job_id]
     process = subprocess.Popen(command, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         cwd=ROOT, env={**os.environ,"AGENT_DATA_DIR":str(settings.data_dir.resolve())})
+    from .execution_limits import task_timeout
+    limit = task_timeout(settings)
     start = time.monotonic()
     try:
         while process.poll() is None:
@@ -36,7 +38,7 @@ def supervise(settings, store, job_id, stop, heartbeat, command=None):
                 store.finish(job_id, "interrupted", error="Worker 停止；未自动重新调用模型")
                 break
             if row["status"] == "cancelled": break
-            if time.monotonic() - start > settings.job_timeout:
+            if limit is not None and time.monotonic() - start > limit:
                 store.finish(job_id, "failed", error="任务超过总时限，计算进程已终止；已发出模型请求可能仍计费")
                 break
             time.sleep(.4)
