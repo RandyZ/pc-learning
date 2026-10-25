@@ -12,6 +12,56 @@ def label(value):
     return value if isinstance(value, str) and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_-]{0,63}', value) else None
 
 
+# Summary metadata is a whitelist, not raw exception or model text.
+FIELD_PATH = re.compile(r'(?:questions|updates)\.Q[1-9][0-9]*\.(?:proof|computations|scene)(?:\.(?:[A-Za-z_][A-Za-z0-9_]{0,39}|[0-9]{1,3})){0,8}')
+
+
+def field_paths(event):
+    paths = []
+    for item in event.get('errors', []) if isinstance(event.get('errors'), list) else []:
+        path = item.get('path') if isinstance(item, dict) else None
+        if isinstance(path, str) and FIELD_PATH.fullmatch(path):
+            paths.append(path)
+    # Historical runs predate structured paths. Match only entire path lines,
+    # never input values, mathematical content, credentials or stack traces.
+    detail = event.get('detail', '')
+    if not paths and isinstance(detail, str):
+        paths = [line.strip() for line in detail.splitlines() if FIELD_PATH.fullmatch(line.strip())]
+    return list(dict.fromkeys(paths))[:16]
+
+
+def output_failure(audit, last, error):
+    if not last:
+        return None
+    # Ignore already-handled errors from prior requests and unrelated stages.
+    index = max(i for i, event in enumerate(audit) if event is last)
+    following = audit[index+1:]
+    stage = label(last.get('stage')) or 'unknown'
+    if 'JSON' in error or 'json' in error:
+        events = [e for e in following if e.get('kind') == 'model_output_error'
+                  and e.get('call') == last.get('call') and e.get('stage') == last.get('stage')]
+        if events:
+            event = events[-1]
+            position = count(event.get('position'))
+            where = f'（字符位置 {position}，从0计数）' if position is not None else ''
+            return {'code': 'MODEL_JSON_INVALID', 'stage': stage, 'call': count(last.get('call')),
+                    'position': position,
+                    'message': f'{stage} 阶段返回的最终 JSON 无效{where}；不是业务超时。',
+                    'suggestion': '查看本地 report.json 中的 model_output_error；原输出已保留，不自动重试。'}
+    contracts = [e for e in following if e.get('kind') == 'contract_error'
+                 and e.get('stage') == last.get('stage')]
+    detail = contracts[-1].get('detail') if contracts else None
+    if contracts and isinstance(detail, str) and detail and (not error or error == detail
+                      or error.startswith(detail[:120])):
+        event = contracts[-1]
+        paths = field_paths(event)
+        where = '：' + '、'.join(paths) if paths else ''
+        return {'code': 'MODEL_CONTRACT_INVALID', 'stage': stage, 'call': count(last.get('call')),
+                'paths': paths, 'message': f'{stage} 阶段输出未通过契约或字段修订校验{where}。',
+                'suggestion': '查看本地 contract_error 和原模型输出；不会删除检查项或自动增加调用预算。'}
+    return None
+
+
 def diagnose(report: dict) -> dict:
     """Use the failed request's own budget and usage, not cumulative token totals.
 
@@ -33,6 +83,9 @@ def diagnose(report: dict) -> dict:
     diagnostic = {'code': 'TASK_FAILED', 'stage': stage,
                   'message': '任务未完成；详细原因请查看本地任务报告。'}
     if last.get('finish_reason') != 'length':
+        specific = output_failure(audit, last, error)
+        if specific:
+            return specific
         if '总时限' in error or '任务超时' in error:
             diagnostic.update(code='JOB_DEADLINE_EXCEEDED', message='任务达到总时限；已发出的请求可能仍计费，不自动重试。')
         return diagnostic

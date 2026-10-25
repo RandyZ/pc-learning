@@ -7,13 +7,14 @@ from ..models.v2_prompts import messages
 from ..tools import DEFINITIONS
 from ..image_tools import VIEW_REGION
 from ..storage import write_json
+from .field_correction import variable_fields, error_locations
 
 
 class PlanSolver:
     def __init__(self, runner, check):
         self.runner, self.check = runner, check
 
-    def _request(self, stage, payload, schema, *, patch=False, correction=False):
+    def _request(self, stage, payload, schema, *, patch=False, correction=False, field_only=False):
         self.check()
         r = self.runner
         definitions = [d for d in DEFINITIONS if d["function"]["name"] in {"algebra_batch", "symbolic_geometry"}]
@@ -26,7 +27,7 @@ class PlanSolver:
             args["output_schema"] = schema
         r.audit("graph_node", {"node": "patch_plan" if patch else "propose_solution", "stage": stage})
         from ..submission import receive
-        raw = receive(r.provider, stage, messages(r.request, r.directory, payload, schema, patch=patch), r.audit,
+        raw = receive(r.provider, stage, messages(r.request, r.directory, payload, schema, patch=patch, field_only=field_only), r.audit,
             tools=definitions, dispatch=lambda name, params: r.dispatch_stage_tool(stage, r.request, name, params), **args)
         self.check()
         write_json(r.directory / f"model-{r.model_calls:02d}-v2-{stage}.json", raw)
@@ -39,9 +40,12 @@ class PlanSolver:
         schema["properties"]["questions"].update(additionalProperties=False, required=ids,
             properties={qid: item for qid in ids})
         payload = {"source": source.model_dump(), "feedback": feedback or []}
+        fields = original = None
         for attempt in range(2):
-            raw = self._request("solve", payload, schema, correction=bool(attempt))
+            response = self._request("solve", payload, fields.schema() if fields else schema,
+                                     correction=bool(attempt), field_only=fields is not None)
             try:
+                raw = fields.apply(original, response) if fields else response
                 parsed = Draft.model_validate(raw)
                 draft, rewrites = normalize_step_references(source, parsed)
                 validate_draft(source, draft)
@@ -50,13 +54,25 @@ class PlanSolver:
                         "before_sha256": digest(parsed), "after_sha256": digest(draft),
                         "rewrites": rewrites,
                         "detail": "Only exact unique step IDs were qualified; raw model output is retained."})
+                if fields:
+                    write_json(self.runner.directory / f"model-{self.runner.model_calls:02d}-v2-solve-merged.json", raw)
+                    self.runner.audit("field_correction", {"stage": "solve",
+                        "before_sha256": fields.base_sha256, "after_sha256": digest(raw),
+                        "paths": [item["path"] for item in fields.context(original)["fields"]],
+                        "detail": "Only authorized variables fields changed; complete Draft and dependency validation passed. Independent review is still required."})
                 return draft
             except ValueError as exc:
-                self.runner.audit("contract_error", {"stage": "solve", "attempt": attempt + 1, "detail": str(exc)[:4000]})
+                self.runner.audit("contract_error", {"stage": "solve", "attempt": attempt + 1,
+                    "detail": str(exc)[:4000], "errors": error_locations(exc)})
                 if attempt:
                     raise
-                payload = {**payload, "format_correction": {"error": str(exc)[:6000], "rejected_output": raw,
-                    "instruction": "仅纠正结构、引用和覆盖，不重新探索；保留全部未知和证据。"}}
+                fields = variable_fields(raw, exc)
+                if fields:
+                    original = raw
+                    payload = {"source": source.model_dump(), "field_correction": fields.context(raw)}
+                else:
+                    payload = {**payload, "format_correction": {"error": str(exc)[:6000], "rejected_output": raw,
+                        "instruction": "仅纠正结构、引用和覆盖，不重新探索；保留全部未知和证据。"}}
         raise AssertionError("unreachable")
 
     def repair(self, source, draft, revision, issues):
@@ -76,7 +92,8 @@ class PlanSolver:
                 updated, impact = apply_changes(source, draft, change, revision, issues)
                 return updated, {"patch": change.model_dump(), **impact}
             except ValueError as exc:
-                self.runner.audit("contract_error", {"stage": stage, "attempt": attempt + 1, "detail": str(exc)[:4000]})
+                self.runner.audit("contract_error", {"stage": stage, "attempt": attempt + 1,
+                    "detail": str(exc)[:4000], "errors": error_locations(exc)})
                 if attempt:
                     raise
                 payload = {**payload, "format_correction": {"error": str(exc)[:6000], "rejected_output": raw}}

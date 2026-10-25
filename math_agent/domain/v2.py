@@ -64,7 +64,11 @@ class Operation(Data):
         "When provided it is an equality assertion that is checked, never ignored. "
         "Not supported for solve/endpoints."))
     equations: list[Expression] = Field(default_factory=list, max_length=6)
-    variables: dict[ID, Literal["real", "positive", "nonnegative", "nonzero"]] = Field(default_factory=dict, max_length=4)
+    variables: dict[ID, Literal["real", "positive", "nonnegative", "nonzero"]] = Field(
+        default_factory=dict, max_length=4, description=(
+            'Final computation plan: name-to-assumption object, e.g. {"x":"real"}; '
+            'NOT the variables array used by the separate algebra_batch tool. '
+            'Stronger assumptions require source/proof support; do not invent them.'))
     substitutions: dict[ID, Scalar] = Field(default_factory=dict, max_length=4, description=(
         "evaluate: omit for constant expressions; substitute every declared variable "
         "when variables are present. substitute_check: at least one explicit substitution. "
