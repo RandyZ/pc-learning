@@ -1,0 +1,2 @@
+class NeedsInput(ValueError):
+    pass

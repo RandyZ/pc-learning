@@ -22,6 +22,15 @@ def key_for(settings, request):
     context['question_agents'] = {'enabled':settings.parallel_questions,'concurrency':settings.question_concurrency,
         'hash':hashlib.sha256(b''.join((ROOT/'math_agent'/f).read_bytes()
             for f in ('parallel_budget.py','question_plan.py','parallel_solve.py'))).hexdigest()}
+    # The classic implementation now spans packages; invalidate evidence when any
+    # migrated rule changes, without including browser assets or credentials.
+    package = ROOT / "math_agent"
+    moved = [package / name for name in ("pipeline.py", "flow.py", "agent_loop.py")]
+    for name in ("application", "domain", "models", "services", "workflows"):
+        moved.extend(sorted((package / name).rglob("*.py")))
+    context["classic_structure_hash"] = hashlib.sha256(b"".join(
+        str(path.relative_to(package)).encode() + b"\0" + path.read_bytes()
+        for path in moved)).hexdigest()
     return "math-agent:v1:" + hashlib.sha256(json.dumps(context, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 

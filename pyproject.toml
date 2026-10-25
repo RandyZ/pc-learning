@@ -16,12 +16,13 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8,<9"]
+studio = ["langgraph-cli[inmem]>=0.4,<1"]
 
 [project.scripts]
 math-agent = "math_agent.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["math_agent*"]
+include = ["math_agent*", "debug*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

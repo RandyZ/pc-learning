@@ -1,0 +1,81 @@
+{
+  "baseline": "d23b43549e5a897a6e348da130b546c6f10b80db",
+  "methods": {
+    "ask": {
+      "module": "math_agent.models.gateway",
+      "body_sha256": "6ada8016190fe2a0f5db0b9f33cb57af15225830e9e302fbcbbe3436938a4547"
+    },
+    "dispatch_stage_tool": {
+      "module": "math_agent.services.tool_execution",
+      "body_sha256": "fca2e6c61b1d333c174e8fa9e3195c9d8b023b797be551785bfad4b0b876d0d6"
+    },
+    "validated": {
+      "module": "math_agent.services.validation",
+      "body_sha256": "661081998c2c01fbf7374696e0aa080049b2e18ac9bfc3dcb0fa5d7b3998d593"
+    },
+    "extract": {
+      "module": "math_agent.services.source",
+      "body_sha256": "e7cd48ea958aa50bd93f11043df2c0e6f72d553c4596c99fbba63896a8d78d19"
+    },
+    "complete_ocr": {
+      "module": "math_agent.services.source",
+      "body_sha256": "3dfae2cb619186b5637d8ff80e6eb11fd04eb94635c4becfc18b6329164b7ce4"
+    },
+    "save_ledger": {
+      "module": "math_agent.services.evidence",
+      "body_sha256": "45ce53238e32440f385cca87d05db6ea92467913d3ba730cb092732c411ac341"
+    },
+    "validate_parallel_candidate": {
+      "module": "math_agent.services.evidence",
+      "body_sha256": "8b48ac060375ecc424521726d09c7d4e1eeecf3582067a145e7f4ad41b179de0"
+    },
+    "solve": {
+      "module": "math_agent.services.solving",
+      "body_sha256": "b9b57d6948e5ac2c2d5f2bf0f4d50f9f712976211db1d8d42a8bba8d77f00f22"
+    },
+    "solve_compact": {
+      "module": "math_agent.services.solving",
+      "body_sha256": "c5b3081d63d578eb01538d6f1f3657b61d9725b780f4d70978888168820ff38f"
+    },
+    "finish_compact": {
+      "module": "math_agent.services.solving",
+      "body_sha256": "da424c9334caf21eb08e86bef2f64d8d02a001a3189b4faa65341e07c90e75ae"
+    },
+    "repair_math": {
+      "module": "math_agent.services.solving",
+      "body_sha256": "69e8fbe271d021813f384beada42e828a9435b6e8353599a1476d28e6c367a19"
+    },
+    "observe": {
+      "module": "math_agent.services.observation",
+      "body_sha256": "5f9cc45faff6a0636c9e26d19a458b6dff53ddb9cf25c1f9e931929f1002c11e"
+    },
+    "review": {
+      "module": "math_agent.services.reviewing",
+      "body_sha256": "19dea13a50a8247461c54a362f303f52d53bc15195f5e3431fa7bb104f8fba87"
+    },
+    "_review": {
+      "module": "math_agent.services.reviewing",
+      "body_sha256": "65e21608ea18236cf57904560dc2d1ed567876b2d57e1a0d36d95487d6759fd3"
+    },
+    "settle_deferred": {
+      "module": "math_agent.services.adjudication",
+      "body_sha256": "2fa6f57d9c4889047d00e12849bc988099bcf1cb4ada086e81f7ee400bce85da"
+    },
+    "adjudicate": {
+      "module": "math_agent.services.adjudication",
+      "body_sha256": "2ee55fc65fb629f24172a55565d231a64354f5314a589ae418beafec27bd7ed4"
+    },
+    "execute": {
+      "module": "math_agent.application.job_service",
+      "body_sha256": "96240624f386b5981e209659d127241e6cc6a3785540c3b3e7400ce651e08364"
+    },
+    "resume_review": {
+      "module": "math_agent.application.job_service",
+      "body_sha256": "0d93bc44ca0581fb3264f4ca5aa693f40834ad52463fa398f7b191ce109cda6a"
+    },
+    "run": {
+      "module": "math_agent.application.job_service",
+      "body_sha256": "c8a3b7adf2f897f5af4fb1b3403f15ec6b5905ddfd2385e5859fda075b77caca"
+    }
+  }
+}

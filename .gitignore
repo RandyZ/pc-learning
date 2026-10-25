@@ -34,3 +34,7 @@ dist/
 *.tar
 *.tar.gz
 *.tgz
+
+# Local graph diagnostics (may contain private task data)
+.classic-debug/
+.langgraph_api/
