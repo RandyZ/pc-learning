@@ -26,6 +26,8 @@ import time
 from urllib.parse import quote
 import uuid
 
+from .diagnostics import budget_messages, diagnose
+
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ("A1", "B0", "B1", "B2")
 MODEL_FIELDS = ("model", "base_url", "api_style", "thinking", "effort", "review_effort",
@@ -192,7 +194,7 @@ def report(root: Path) -> dict:
         result_file = directory / "result.json"
         row = {"case_id": case, "profile": profile, "status": item["launcher_status"],
                "seconds": None, "model_calls": None, "output_tokens": None,
-               "quality": "未人工评审", "links": {}}
+               "quality": "未人工评审", "failure": {}, "links": {}}
         if result_file.exists():
             try:
                 if not result_file.resolve().is_relative_to(root.resolve()):
@@ -214,6 +216,12 @@ def report(root: Path) -> dict:
                         link = local_link(path, root)
                         if link:
                             row["links"][label] = link
+                    task_report = job_dir / "report.json"
+                    if row["status"] != "completed" and local_link(task_report, root):
+                        try:
+                            row["failure"] = diagnose(read_json(task_report))
+                        except (OSError, ValueError, TypeError, AttributeError):
+                            warnings.append(f"{case}/{profile}：任务诊断不可读；原失败状态保留。")
                     if row["status"] == "completed":
                         link = local_link(job_dir / "output" / "result.html", root)
                         if link:
@@ -237,6 +245,8 @@ def report(root: Path) -> dict:
         for key in MODEL_FIELDS:
             if len({json.dumps(r.get("effective_config", {}).get(key), sort_keys=True) for r in results}) > 1:
                 warnings.append(f"{case}：{key} 不一致，不能视为严格的同配置对照。")
+        if len({r.get("effective_config", {}).get("compact_tools") for r in results}) > 1:
+            warnings.append(f"{case}：compact_tools 不一致；本轮包含输出协议差异，不是 compact classic 与 V2 的对照。")
         if len({r.get("input_hash") for r in results}) > 1:
             warnings.append(f"{case}：实际输入哈希不同。")
     groups = {}
@@ -251,15 +261,16 @@ def report(root: Path) -> dict:
     summary = {"runs": rows, "groups": groups, "warnings": warnings,
                "note": "完成≠数学正确；时延中位数仅统计完成项，失败/未运行数量另列。未完成人工评审，不宣称正确率或提速达标。"}
     atomic_json(root / "summary.json", summary)
-    headers = ["题号", "配置", "状态", "秒", "模型请求", "输出Token", "结果"]
+    headers = ["题号", "配置", "状态", "秒", "模型请求", "输出Token", "失败原因", "结果"]
     md = ["# 本地对照测试", "", summary["note"], "", "| " + " | ".join(headers) + " |",
-          "|---|---|---|---:|---:|---:|---|"]
+          "|---|---|---|---:|---:|---:|---|---|"]
     table = []
     for row in rows:
         values = [row["case_id"], row["profile"], row["status"],
                   f"{row['seconds']:.1f}" if row["seconds"] is not None else "—",
                   str(row["model_calls"]) if row["model_calls"] is not None else "—",
-                  str(row["output_tokens"]) if row["output_tokens"] is not None else "—"]
+                  str(row["output_tokens"]) if row["output_tokens"] is not None else "—",
+                  row["failure"].get("message", "—")]
         links = {k: v for k, v in row["links"].items() if v}
         md.append("| " + " | ".join(v.replace("|", "\\|").replace("\n", " ") for v in values) + " | " +
                   " · ".join(f"[{k}]({v})" for k, v in links.items()) + " |")
@@ -301,10 +312,13 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 config = json.loads(sys.stdin.read())
 base = dict(os.environ)
+configurations = []
 for profile in config['profiles']:
     os.environ.clear(); os.environ.update(base); os.environ.update(overrides(profile))
     os.environ.update(REDIS_URL='', AGENT_DATA_DIR=str(Path(tempfile.gettempdir()) / 'pc-learning-preflight'))
-    Settings()
+    settings = Settings()
+    configurations.append({"profile": profile, **{key: getattr(settings, key) for key in
+        ("max_tokens", "solve_max_tokens", "thinking", "effort", "compact_tools")}})
 for name in config['images']:
     with Image.open(name) as image:
         image.verify()
@@ -317,6 +331,7 @@ with sync_playwright() as p:
             browser.new_page().goto(page_file.as_uri(), wait_until='load', timeout=10000)
     finally:
         browser.close()
+print('PREFLIGHT_CONFIG=' + json.dumps(configurations))
 print('PREFLIGHT_OK')
 '''
 
@@ -331,6 +346,12 @@ def preflight(env: dict[str, str], plan: dict) -> None:
         raise ValueError("依赖/配置/本地浏览器预检超时；尚未调用模型。") from None
     if checked.returncode:
         raise ValueError("预检失败；尚未调用模型。请检查依赖、配置、图片和 Chromium：\n" + redact(checked.stdout, env)[-6000:])
+
+    for line in checked.stdout.splitlines():
+        if line.startswith("PREFLIGHT_CONFIG="):
+            configs = json.loads(line.split("=", 1)[1])
+            for message in budget_messages(configs):
+                print(message, flush=True)
 
 
 @contextmanager
@@ -405,7 +426,12 @@ def execute(plan: dict, out: Path, env: dict[str, str]) -> int:
             atomic_json(out / "suite.json", plan)
             summary = report(out)
             row = summary["runs"][index - 1]
-            print(f"  {row['status']} | {row['seconds'] if row['seconds'] is not None else '未知'} 秒 | 模型请求 {row['model_calls'] if row['model_calls'] is not None else '未知'}", flush=True)
+            seconds_text = f"{row['seconds']:.1f}" if row["seconds"] is not None else "未知"
+            print(f"  {row['status']} | {seconds_text} 秒 | 模型请求 {row['model_calls'] if row['model_calls'] is not None else '未知'}", flush=True)
+            if row["failure"]:
+                print("  原因：" + row["failure"]["message"], flush=True)
+                if row["failure"].get("suggestion"):
+                    print("  提示：" + row["failure"]["suggestion"], flush=True)
             if row["status"] in {"interrupted", "cancelled"}:
                 stop.requested = True
             # A task-level failure is part of the comparison. A launcher failure
