@@ -74,6 +74,9 @@ def render_report(out: Path) -> dict:
         raise EvaluationError('指定目录没有 runs.json；请使用本脚本生成的评测目录。')
     labels = quality_labels(out, {r['case_id'] for r in rows})
     value = summary(rows, labels)
+    manifest = read_json(out/'manifest.json', {})
+    value['budget_mode'] = manifest.get('budget_mode', 'production')
+    value['execution_limits'] = manifest.get('settings', {}).get('execution_limits')
     write_json(out/'summary.json', value)
     columns = ('case_id', 'status', 'end_to_end_seconds', 'execution_seconds', 'model_calls',
                'known_output_tokens', 'usage_complete', 'failure_stage', 'error', *QUALITY, 'artifact')

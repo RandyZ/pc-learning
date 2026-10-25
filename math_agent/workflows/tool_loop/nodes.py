@@ -15,15 +15,19 @@ def model(state, runtime: Runtime[LoopContext]):
     remaining_calls = runtime.context.remaining_calls
     verify_initial_output = runtime.context.verify_initial_output
     remaining_seconds = runtime.context.remaining_seconds
-    if state['turns'] >= 4:
+    max_turns = runtime.context.max_turns
+    if max_turns is not None and state['turns'] >= max_turns:
         raise error_type('本阶段工具往返超过上限')
     audit('agent_node', {'stage': stage, 'node': 'model', 'turn': state['turns'] + 1})
-    time_final = remaining_seconds is not None and remaining_seconds() < 55
-    final_turn = time_final or state['turns'] == 3 or (remaining_calls is not None and remaining_calls() <= 1)
+    seconds_left = remaining_seconds() if remaining_seconds is not None else None
+    calls_left = remaining_calls() if remaining_calls is not None else None
+    time_final = seconds_left is not None and seconds_left < 55
+    turn_final = max_turns is not None and state['turns'] == max_turns - 1
+    final_turn = time_final or turn_final or (calls_left is not None and calls_left <= 1)
     history = state['history']
     if final_turn:
         history = history + [{'role': 'user', 'content': '本阶段最后一轮：请根据已有观察提交完整的阶段 JSON，不再调用工具。保留所有未决问题和失败证据，不得宣称未执行的检查已通过；提交后仍会进行契约和浏览器核验。'}]
-        audit('agent_finalize', {'stage': stage, 'turn': state['turns'] + 1, 'reason': 'stage_time' if time_final else 'stage_limit' if state['turns'] == 3 else 'job_budget'})
+        audit('agent_finalize', {'stage': stage, 'turn': state['turns'] + 1, 'reason': 'stage_time' if time_final else 'stage_limit' if turn_final else 'job_budget'})
     message, finish = request(history, None if final_turn else tools)
     if finish == 'tool_calls':
         calls = message.get('tool_calls', [])
@@ -48,7 +52,8 @@ def execute_tools(state, runtime: Runtime[LoopContext]):
     stage = runtime.context.stage
     error_type = runtime.context.error_type
     allowed = {t.get('function', {}).get('name') for t in runtime.context.tools or []}
-    if state['turns'] >= 4 or state.get('finalizing'):
+    max_turns = runtime.context.max_turns
+    if (max_turns is not None and state['turns'] >= max_turns) or state.get('finalizing'):
         raise error_type('最终输出轮不允许继续调用工具，未执行工具或自动追加预算')
     message = state['message']
     history = state['history'] + [{k: v for k, v in message.items() if k in {'role', 'content', 'reasoning_content', 'tool_calls', '_response_items'}}]

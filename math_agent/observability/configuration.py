@@ -12,4 +12,6 @@ def effective(settings):
         value = getattr(settings, field.name)
         result[field.name] = str(value) if isinstance(value, Path) else value
     result["key_configured"] = bool(settings.api_key)
+    from math_agent.execution_limits import snapshot
+    result["execution_limits"] = snapshot(settings)
     return result

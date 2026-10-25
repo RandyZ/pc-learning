@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 import httpx
+from .execution_limits import validation, task_timeout, call_limit
 
 
 class ModelError(RuntimeError):
@@ -117,6 +118,12 @@ class DeepSeek:
         self.client.close()
 
     def remaining_seconds(self):
+        if validation(self.settings):
+            limit = task_timeout(self.settings)
+            local = None if limit is None else limit - (time.monotonic() - self.started)
+            shared = self.shared_budget.remaining_seconds() if self.shared_budget is not None else None
+            values = [v for v in (local, shared) if v is not None]
+            return min(values) if values else None
         reserve = self.settings.review_reserve_seconds
         shared = self.shared_budget.remaining_seconds() if self.shared_budget is not None else None
         if not reserve: return shared
@@ -124,6 +131,20 @@ class DeepSeek:
         end = self.settings.job_timeout - (reserve + 5 if not self.review_started else 0)
         result = end - (time.monotonic() - self.started)
         return min(result, shared) if shared is not None else result
+
+    def request_timeout(self, remaining):
+        if remaining is not None:
+            return httpx.Timeout(max(.01, remaining), connect=min(15, max(.01, remaining)))
+        if validation(self.settings):
+            # Generation may be long; connection/write/pool failures still terminate.
+            return httpx.Timeout(None, connect=15, write=self.settings.http_timeout, pool=15)
+        return self.settings.http_timeout
+
+    def remaining_model_calls(self):
+        if self.shared_budget is not None:
+            return self.shared_budget.remaining_calls
+        limit = call_limit(self.settings)
+        return None if limit is None else limit - self.calls
 
     def before_transport(self,stage):
         # Payload/pixel preparation may outlast an admitted request's deadline.
@@ -145,7 +166,7 @@ class DeepSeek:
             self.review_started = True
         from .agent_loop import run_loop
         fast_draft = (stage == "solve" and self.settings.solve_draft and self.settings.thinking
-                      and self.settings.max_calls-self.calls >= 2)
+                      and (validation(self.settings) or self.settings.max_calls-self.calls >= 2))
         initial = True
         def request(history, definitions):
             nonlocal initial
@@ -158,9 +179,10 @@ class DeepSeek:
                                 thinking_override=False if fast else None,
                                 tool_choice="none" if final else None, output_schema=output_schema)
         return run_loop(request, messages, tools, dispatch, self.audit, stage, ModelError,
-                        remaining_calls=lambda: self.shared_budget.remaining_calls if self.shared_budget is not None else self.settings.max_calls-self.calls,
+                        remaining_calls=self.remaining_model_calls,
                         verify_initial_output=fast_draft,
-                        remaining_seconds=self.remaining_seconds if self.settings.review_reserve_seconds or self.shared_budget is not None else None)
+                        remaining_seconds=self.remaining_seconds if validation(self.settings) or self.settings.review_reserve_seconds or self.shared_budget is not None else None,
+                        max_turns=None if validation(self.settings) else 4)
 
     def effort_for_stage(self,stage):
         if self.settings.review_effort and stage in {'review','math_review','graph_review','diagram_review','adjudicate','deferred_review'}:
@@ -186,7 +208,8 @@ class DeepSeek:
             raise ModelError(str(exc)) from None
 
     def _request(self, stage, history, tools=None, *, thinking_override=None, tool_choice=None, json_mode=True, output_schema=None):
-        if self.calls >= self.settings.max_calls:
+        limit = call_limit(self.settings)
+        if limit is not None and self.calls >= limit:
             raise ModelError("达到模型调用预算上限；请查看已记录的阶段和异议")
         remaining = self.remaining_seconds()
         if remaining is not None and remaining <= 0:
@@ -202,6 +225,10 @@ class DeepSeek:
             tokens = self.settings.solve_max_tokens
         elif stage in {"review", "review_plan", "math_review", "graph_review", "adjudicate"} and self.settings.review_max_tokens:
             tokens = self.settings.review_max_tokens
+        if validation(self.settings):
+            tokens = self.settings.validation_max_tokens
+            if tokens < 512:
+                raise ModelError("验证模式尚未解析模型输出上限；未发送请求，请使用评测入口或 --max-output-tokens")
         if self.settings.api_style=='deepseek':
             from .image_transport import prepare_messages
             prepared_at=time.perf_counter()
@@ -241,7 +268,7 @@ class DeepSeek:
         try:
             response = self.client.post(self.settings.base_url.rstrip("/") + "/chat/completions",
                 headers={"Authorization": "Bearer " + self.settings.api_key}, json=body,
-                timeout=httpx.Timeout(max(.01,remaining), connect=min(15,max(.01,remaining))) if remaining is not None else self.settings.http_timeout)
+                timeout=self.request_timeout(remaining))
         except httpx.TimeoutException:
             self.audit("model", {"stage":stage,"call":self.calls,"error":"stage_timeout"})
             raise ModelError("模型请求超出阶段时间预算；未自动重发，未发布未经复核结果，已发请求可能仍计费") from None
@@ -268,7 +295,7 @@ class DeepSeek:
             if remaining is not None and self.remaining_seconds() <= 0:
                 raise ModelError("模型返回时已超过阶段时间预算；已记录用量，未把迟到输出当作完成")
             if finish == "length":
-                raise ModelError("模型输出被截断；没有把不完整答案交给网页引擎")
+                raise ModelError(f"模型输出被截断（本次 max_tokens={tokens}）；API输出/上下文上限仍有效，未自动重试或发布不完整答案")
             if finish == "stop":
                 content = message.get("content")
                 from .json_framing import close_completed_containers,audit_closure
@@ -336,7 +363,7 @@ class DeepSeek:
         try:
             response = self.client.post(self.settings.base_url.rstrip("/")+"/responses",
                 headers={"Authorization":"Bearer "+self.settings.api_key},json=payload,
-                timeout=httpx.Timeout(max(.01,remaining),connect=min(15,max(.01,remaining))) if remaining is not None else self.settings.http_timeout)
+                timeout=self.request_timeout(remaining))
         except httpx.HTTPError as exc:
             self.audit("model",{"stage":stage,"call":self.calls,"error":type(exc).__name__,"transport":"responses"})
             raise ModelError("Responses网络请求失败；没有自动重发，已发请求可能计费") from None
@@ -436,7 +463,7 @@ class DeepSeek:
             response = self.client.post(self.settings.base_url.rstrip("/") + "/v1/messages",
                 headers={"x-api-key": self.settings.api_key, "anthropic-version": "2023-06-01"},
                 json=body,
-                timeout=httpx.Timeout(max(.01, remaining), connect=min(15, max(.01, remaining))) if remaining is not None else self.settings.http_timeout)
+                timeout=self.request_timeout(remaining))
         except httpx.TimeoutException:
             self.audit("model", {"stage": stage, "call": self.calls, "error": "stage_timeout"})
             raise ModelError("模型请求超出阶段时间预算；未自动重发，未发布未经复核结果，已发请求可能仍计费") from None
@@ -472,7 +499,7 @@ class DeepSeek:
                 "seconds": elapsed, "finish_reason": finish, "stop_reason": stop,
                 "thinking_blocks": sum(1 for b in blocks if isinstance(b, dict) and b.get("type") == "thinking")})
             if finish == "length":
-                raise ModelError("模型输出被截断；没有把不完整答案交给网页引擎")
+                raise ModelError(f"模型输出被截断（本次 max_tokens={tokens}）；API输出/上下文上限仍有效，未自动重试或发布不完整答案")
             if finish == "stop" and text:
                 stripped = _strip_code_fence(text)
                 if stripped != text:

@@ -1,5 +1,6 @@
 """Compatible classic entrypoint backed by explicit LangGraph nodes and Runtime Context."""
 from langsmith import tracing_context
+from .execution_limits import graph_limit
 from .workflows.classic.graph import build_graph
 from .workflows.classic.context import ClassicContext
 from .workflows.classic.state import State
@@ -12,5 +13,5 @@ def execute_graph(runner, initial=None):
     # The optional explicit sink sends only allowlisted span metadata.
     with tracing_context(enabled=False):
         return compiled.invoke(initial or {"repairs":0, "feedback":[]},
-            {"recursion_limit":8 + runner.settings.max_repairs * 6, "callbacks":[]},
+            {"recursion_limit":graph_limit(runner.settings, 8 + runner.settings.max_repairs * 6), "callbacks":[]},
             context=ClassicContext(runner))

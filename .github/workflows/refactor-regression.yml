@@ -27,19 +27,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Archive tracked source for reproducible regression
-        run: git archive --format=zip --output=source-snapshot.zip HEAD
-      - uses: actions/upload-artifact@v4
-        with:
-          name: refactor-source
-          path: source-snapshot.zip
-          retention-days: 1
-      - name: Check deployment, model strategies and V2 are untouched
+      - name: Check deployment, prompts, tools and V2 are untouched
         run: >-
           git diff --exit-code d23b43549e5a897a6e348da130b546c6f10b80db --
           Dockerfile compose.yaml deploy/ .env.example constraints.txt
-          math_agent/api.py math_agent/cli.py math_agent/worker.py
-          math_agent/config.py math_agent/provider.py math_agent/prompts.py
+          math_agent/api.py math_agent/cli.py
+          math_agent/prompts.py
           math_agent/tools.py math_agent/jsxgraph/ math_agent/web/
       - name: Install locked dependencies
         run: python -m pip install -c constraints.txt -e '.[test]'

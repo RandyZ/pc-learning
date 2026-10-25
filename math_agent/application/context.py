@@ -11,6 +11,7 @@ from math_agent.rendering import render
 from math_agent.storage import Store, write_json
 from math_agent.scene_tools import SceneTools
 from math_agent.image_tools import ImageTools
+from math_agent.execution_limits import call_limit, deadline
 
 class JobContext:
 
@@ -31,7 +32,7 @@ class JobContext:
         self.parallel_review_rounds = []
         if settings.parallel_questions or settings.parallel_review:
             from math_agent.parallel_budget import ParallelBudget
-            self.shared_budget = ParallelBudget(settings.max_calls, deadline=self.started + settings.job_timeout, max_concurrency=2 if settings.parallel_review else settings.question_concurrency)
+            self.shared_budget = ParallelBudget(call_limit(settings), deadline=deadline(settings, self.started), max_concurrency=2 if settings.parallel_review else settings.question_concurrency)
         self.provider = provider_factory(settings, self.audit)
         if self.shared_budget is not None:
             self.provider.shared_budget = self.shared_budget

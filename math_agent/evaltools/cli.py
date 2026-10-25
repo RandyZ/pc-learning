@@ -23,7 +23,11 @@ def main(argv=None) -> int:
     run.add_argument('--env', type=Path, help='默认自动读取项目根目录 .env；已有环境变量优先')
     run.add_argument('--out', type=Path, help='必须是新目录；默认自动生成 eval-runs/时间戳')
     run.add_argument('--dry-run', action='store_true', help='只准备图片和配置，零模型请求')
-    run.add_argument('--timeout', type=int, help='显式覆盖单题秒数；默认沿用 AGENT_JOB_TIMEOUT')
+    run.add_argument('--budget-mode', choices=('validation', 'production'), default='validation',
+                     help='默认validation跑完整结果，不沿用生产预算；production用于受限时延对照')
+    run.add_argument('--max-output-tokens', type=int,
+                     help='验证模式手动指定供应商输出上限；默认通过/models读取，不使用生产低额度')
+    run.add_argument('--timeout', type=int, help='显式单题秒数；validation默认无截止，production默认沿用AGENT_JOB_TIMEOUT')
     report = sub.add_parser('report', help='重建报告/应用 quality.csv 人工评分，不调用模型')
     report.add_argument('directory', type=Path)
     comparison = sub.add_parser('compare', help='对比本脚本的两次运行，不调用模型')
@@ -49,7 +53,8 @@ def main(argv=None) -> int:
         cases = select(args.cases, discover(args.fixtures.resolve()))
         os.umask(0o077)
         out, code = run_batch(cases, ROOT, env_file=args.env, out=args.out,
-                             dry_run=args.dry_run, timeout=args.timeout)
+                             dry_run=args.dry_run, timeout=args.timeout,
+                             budget_mode=args.budget_mode, max_output_tokens=args.max_output_tokens)
         print('报告：' + str(out/'report.html'))
         return code
     except EvaluationError as exc:

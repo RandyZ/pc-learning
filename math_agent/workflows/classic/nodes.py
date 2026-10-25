@@ -7,6 +7,7 @@ from math_agent.rendering import RenderError
 from math_agent.storage import write_json
 from math_agent.observability.tracing import traced_node
 from .context import ClassicContext
+from math_agent.execution_limits import repair_allowed
 
 @traced_node
 def source(state, runtime: Runtime[ClassicContext]):
@@ -63,7 +64,7 @@ def review(state, runtime: Runtime[ClassicContext]):
 def repair(state, runtime: Runtime[ClassicContext]):
     runner = runtime.context.job
     count = state.get('repairs', 0)
-    if count >= runner.settings.max_repairs:
+    if not repair_allowed(runner.settings, count):
         raise ValueError('修复次数已用完，未发布网页。最后异议：' + str(state['feedback'])[:2200])
     stages = {i['stage'] for i in state['feedback']}
     next_stage = 'source' if 'source' in stages else 'math_repair' if 'math' in stages else 'diagram'

@@ -25,12 +25,15 @@ def key_for(settings, request):
     # The classic implementation now spans packages; invalidate evidence when any
     # migrated rule changes, without including browser assets or credentials.
     package = ROOT / "math_agent"
-    moved = [package / name for name in ("pipeline.py", "flow.py", "agent_loop.py")]
+    moved = [package / name for name in ("pipeline.py", "flow.py", "agent_loop.py", "execution_limits.py")]
     for name in ("application", "domain", "models", "services", "workflows"):
         moved.extend(sorted((package / name).rglob("*.py")))
     context["classic_structure_hash"] = hashlib.sha256(b"".join(
         str(path.relative_to(package)).encode() + b"\0" + path.read_bytes()
         for path in moved)).hexdigest()
+    from .execution_limits import validation, snapshot
+    if validation(settings):
+        context["validation_policy"] = snapshot(settings)
     return "math-agent:v1:" + hashlib.sha256(json.dumps(context, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 

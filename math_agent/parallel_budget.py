@@ -95,10 +95,10 @@ class ParallelBudget:
     ``deadline`` is absolute on that clock, not wall-clock/Unix time.
     """
 
-    def __init__(self, max_calls: int, *, timeout_seconds: float | None = None,
+    def __init__(self, max_calls: int | None, *, timeout_seconds: float | None = None,
                  deadline: float | None = None, max_concurrency: int = 2,
                  clock: Callable[[], float] = time.monotonic):
-        if type(max_calls) is not int or max_calls <= 0:
+        if max_calls is not None and (type(max_calls) is not int or max_calls <= 0):
             raise ValueError("max_calls must be a positive integer")
         if type(max_concurrency) is not int or not 1 <= max_concurrency <= 2:
             raise ValueError("max_concurrency must be 1 or 2")
@@ -125,9 +125,9 @@ class ParallelBudget:
             return len(self._records)
 
     @property
-    def remaining_calls(self) -> int:
+    def remaining_calls(self) -> int | None:
         with self._condition:
-            return self.max_calls - len(self._records)
+            return None if self.max_calls is None else self.max_calls - len(self._records)
 
     def remaining_seconds(self) -> float | None:
         return None if self.deadline is None else max(0.0, self.deadline - self._clock())
@@ -169,7 +169,7 @@ class ParallelBudget:
         with self._condition:
             while True:
                 self._check_stopped()
-                if len(self._records) >= self.max_calls:
+                if self.max_calls is not None and len(self._records) >= self.max_calls:
                     raise CallsExhausted("Job model-call budget exhausted")
                 if len(self._active) < self.max_concurrency:
                     call_id = len(self._records) + 1
@@ -200,7 +200,7 @@ class ParallelBudget:
             counts = [_counts(record['usage']) for record in records]
             known = [count for count in counts if count is not None]
             not_sent=sum(bool(record.get('not_sent')) for record in records)
-            return {'calls': len(records), 'remaining_calls': self.max_calls - len(records),
+            return {'calls': len(records), 'remaining_calls': self.remaining_calls,
                     'active': len(self._active), 'max_concurrency': self.max_concurrency,
                     'peak_concurrency': self._peak_concurrency,
                     'remaining_seconds': self.remaining_seconds(),

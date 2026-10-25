@@ -16,6 +16,8 @@ import uuid
 
 from .inputs import Case, EvaluationError, load_env
 from .reporting import read_json, render_report
+from .budgets import resolve_output_limit
+from ..execution_limits import snapshot
 from ..storage import Store, write_json
 
 # Explicit allowlist: future credentials added to Settings cannot leak by accident.
@@ -27,6 +29,7 @@ PUBLIC_SETTINGS = (
     'effort', 'review_effort', 'max_tokens', 'solve_max_tokens', 'review_max_tokens',
     'review_reserve_seconds', 'source_max_tokens', 'ocr_profile', 'ocr_timeout',
     'job_timeout', 'max_calls', 'http_timeout', 'max_repairs',
+    'validation_mode', 'validation_max_tokens', 'validation_timeout',
 )
 
 
@@ -139,9 +142,18 @@ def finish_case(row: dict, store: Store, started: float, last_stage: str, out: P
 
 
 def run_batch(cases: list[Case], root: Path, *, env_file: Path | None = None,
-              out: Path | None = None, dry_run: bool = False, timeout: int | None = None) -> tuple[Path, int]:
+              out: Path | None = None, dry_run: bool = False, timeout: int | None = None,
+              budget_mode: str = 'production', max_output_tokens: int | None = None) -> tuple[Path, int]:
     if os.name != 'posix':
         raise EvaluationError('原 Worker 需要 Linux/macOS；Windows 请在 WSL2 中执行。')
+    if budget_mode not in {'validation', 'production'}:
+        raise EvaluationError('未知预算模式。')
+    if max_output_tokens is not None and (type(max_output_tokens) is not int or max_output_tokens < 512):
+        raise EvaluationError('--max-output-tokens 必须是至少512的整数。')
+    if budget_mode == 'production' and max_output_tokens is not None:
+        raise EvaluationError('production 模式沿用 .env 的额度，不叠加 --max-output-tokens。')
+    if timeout is not None and timeout < 0:
+        raise EvaluationError('--timeout 必须非负；验证模式0表示不设任务截止。')
     inherited = load_env(env_file or root/'.env', required=env_file is not None)
     if inherited:
         print('已有环境变量优先于 .env：' + ', '.join(inherited), flush=True)
@@ -153,7 +165,10 @@ def run_batch(cases: list[Case], root: Path, *, env_file: Path | None = None,
     # These changes affect only this process and its children, never production .env.
     os.environ.update(AGENT_DATA_DIR=str(out/'runtime'), REDIS_URL='',
                       LANGSMITH_TRACING='false', LANGCHAIN_TRACING_V2='false')
-    if timeout is not None:
+    os.environ.update(AGENT_VALIDATION_MODE=str(budget_mode == 'validation').lower(),
+                      AGENT_VALIDATION_MAX_TOKENS=str(max_output_tokens or 0),
+                      AGENT_VALIDATION_TIMEOUT=str(timeout or 0))
+    if timeout is not None and budget_mode == 'production':
         os.environ['AGENT_JOB_TIMEOUT'] = str(timeout)
     out.mkdir(parents=True, mode=0o700)
     from ..config import Settings
@@ -161,21 +176,30 @@ def run_batch(cases: list[Case], root: Path, *, env_file: Path | None = None,
         cfg = Settings()
     except (ValueError, TypeError):
         raise EvaluationError('配置校验失败；请检查本地模型配置与预算，不要使用 shell 展开。') from None
-    print(f'题数={len(cases)}；模型={cfg.model}；思考={cfg.effort}；单题时限={cfg.job_timeout}s；单题调用上限={cfg.max_calls}', flush=True)
-    print('仅测试数据目录隔离、禁用成品缓存和远端追踪；其他推理策略沿用实际配置。', flush=True)
     if not dry_run:
         preflight(cfg)
+        if budget_mode == 'validation':
+            os.environ['AGENT_VALIDATION_MAX_TOKENS'] = str(resolve_output_limit(cfg, max_output_tokens))
+            cfg = Settings()
+    limits = snapshot(cfg)
+    print(f'题数={len(cases)}；模式={budget_mode}；模型={cfg.model}；思考={cfg.effort}', flush=True)
+    print('实际预算：' + json.dumps(limits, ensure_ascii=False), flush=True)
+    if budget_mode == 'validation':
+        print('完整验证：忽略生产时间/调用/返修/轮次和阶段token预算。可能耗时和费用较高；Ctrl+C可停止。'
+              'API上限、工具沙箱、格式/数学/发布门禁仍生效，不自动重试网络请求。', flush=True)
+    else:
+        print('生产预算对照：沿用实际额度与截止时间，不改变模型或思考策略。', flush=True)
     store = Store(cfg.data_dir)
     identity = code_identity(root)
     config = asdict(cfg)
     settings = {k: config[k] for k in PUBLIC_SETTINGS if k in config}
-    settings.update(ocr_enabled=bool(cfg.ocr_url), application_cache=False, remote_tracing=False)
+    settings.update(ocr_enabled=bool(cfg.ocr_url), application_cache=False, remote_tracing=False, execution_limits=limits)
     rows = [prepare_case(case, store) for case in cases]  # Validate every input before ANY paid request.
-    manifest = {'schema_version': 'simple-eval-v1', 'code': identity, 'settings': settings,
+    manifest = {'schema_version': 'simple-eval-v2', 'budget_mode': budget_mode, 'code': identity, 'settings': settings,
                 'selected_cases': [c.id for c in cases], 'dry_run': dry_run,
                 'timing_scope': 'enqueue to artifact ready; input preparation is outside per-task timing',
                 'input_roles': 'question + optional reference answer (not trusted gold)',
-                'budget_note': 'one bounded attempt per selected case; no automatic repeat'}
+                'budget_note': 'one fresh attempt per case; validation removes application budgets, not API/tool safety limits; no automatic transport retry'}
     write_json(out/'manifest.json', manifest)
     if dry_run:
         for row in rows:

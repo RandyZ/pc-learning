@@ -13,3 +13,4 @@ class LoopContext:
     remaining_calls: Callable | None = None
     verify_initial_output: bool = False
     remaining_seconds: Callable | None = None
+    max_turns: int | None = 4

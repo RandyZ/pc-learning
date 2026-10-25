@@ -47,7 +47,18 @@ class Settings:
     redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", ""))
     cache_ttl: int = field(default_factory=lambda: int(os.getenv("AGENT_CACHE_TTL", "604800")))
 
+    # Set only by the explicit local evaluation entrypoint; normal services default off.
+    validation_mode: bool = field(default_factory=lambda: os.getenv("AGENT_VALIDATION_MODE", "false").lower() == "true")
+    validation_max_tokens: int = field(default_factory=lambda: int(os.getenv("AGENT_VALIDATION_MAX_TOKENS", "0")))
+    validation_timeout: int = field(default_factory=lambda: int(os.getenv("AGENT_VALIDATION_TIMEOUT", "0")))
+
     def __post_init__(self):
+        if type(self.validation_mode) is not bool:
+            raise ValueError("validation_mode must be boolean")
+        if type(self.validation_max_tokens) is not int or self.validation_max_tokens < 0 or 0 < self.validation_max_tokens < 512:
+            raise ValueError("validation_max_tokens must be 0 (unresolved) or >= 512")
+        if type(self.validation_timeout) is not int or self.validation_timeout < 0:
+            raise ValueError("validation_timeout must be nonnegative")
         if self.parallel_review and (not self.compact_tools or self.reference_mode or self.review_plan or self.api_style!='deepseek'):
             raise ValueError('分问复核仅支持compact classic流程，不能叠加reference或review_plan')
         if self.parallel_review and self.incremental_review:
@@ -75,7 +86,7 @@ class Settings:
             raise ValueError("模型地址不能包含凭据、查询或片段")
         if not 30 <= self.job_timeout <= 3600 or not 1 <= self.max_calls <= 30:
             raise ValueError("任务时限应为30～3600秒，调用上限应为1～30")
-        if not 0 <= self.max_repairs <= 4 or not 512 <= self.max_tokens <= 64000:
+        if not 0 <= self.max_repairs <= 4 or not (512 <= self.max_tokens and (self.validation_mode or self.max_tokens <= 64000)):
             raise ValueError("修复次数或输出长度不在支持范围内")
         if not 30 <= self.http_timeout <= 1200:
             raise ValueError("单请求HTTP超时须为30～1200秒")

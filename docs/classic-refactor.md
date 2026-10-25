@@ -1,6 +1,6 @@
 # Classic LangGraph 结构重构（独立验收分支）
 
-本分支只改变经典流程的职责组织、可观测性和开发入口。不包含 Evidence V2 的计算计划、构图宏、额外并行或精确复用。模型、提示词、思考强度、额度、工具白名单和修复规则不变。真实 DeepSeek 速度、数学质量以及真实 LangSmith/Studio 连接尚未验收。
+本分支只改变经典流程的职责组织、可观测性和开发入口。不包含 Evidence V2 的计算计划、构图宏、额外并行或精确复用。生产默认的模型、提示词、思考强度、额度、工具白名单和修复规则不变；编号评测入口的完整验证模式另见文末。真实 DeepSeek 速度、数学质量以及真实 LangSmith/Studio 连接尚未验收。
 
 ## 为什么独立
 
@@ -25,11 +25,11 @@
 
 ## 行为约束
 
-正常顺序仍为 source → solve → observe → review。来源问题回 source；数学问题回 math_repair；仅图形问题回 diagram；修复次数和每阶段最多四轮模型请求保持。模型工具历史的 reasoning_content、工具配对、最后一轮 tool_choice=none 和真实未知项均保留。
+正常顺序仍为 source → solve → observe → review。来源问题回 source；数学问题回 math_repair；仅图形问题回 diagram；生产模式保持原修复次数和每阶段最多四轮模型请求；显式完整验证模式解除这些预算。模型工具历史的 reasoning_content、工具配对、最后一轮 tool_choice=none 和真实未知项均保留。
 
 没有新增自动 RetryPolicy、付费节点 checkpoint 重放或隐藏模型请求；重启仍按原 Worker 标记 interrupted。缓存键新增迁移代码指纹，防止服务代码修改后沿用不匹配证据；因此与旧版成品缓存隔离，切换后的首次新请求可能不命中旧缓存。后续同版本命中规则不变。
 
-Dockerfile、compose.yaml、deploy/、原 API/CLI/Worker、配置默认值和生产启动命令不变。CI 明确检查这些文件及模型策略、上游浏览器资产无差异。
+Dockerfile、compose.yaml、deploy/、原 API/CLI、生产预算默认值和启动命令不变。CI 检查部署、提示词、工具与浏览器资产无差异；Worker/Provider 的验证模式适配使用回归测试验证生产行为。
 
 ## 测试与统计
 
@@ -72,3 +72,7 @@ langgraph dev --config langgraph.json
 ## 当前边界
 
 离线测试和真实浏览器/Redis集成测试均使用模型测试替身，不使用聊天中给过的 Key。不能由测试通过推出真实 DeepSeek 成功率或 120–180 秒目标。此分支只为结构验收和后续 V2 结构迁移提供可靠基线，不自动合并或部署。
+
+## 评测预算更新
+
+编号评测入口默认完整验证，使用 `python scripts/evaluate.py run 1 --budget-mode production` 才保留原生产预算。为此 config、Provider、Worker、图循环增加显式验证模式分支；默认关闭时原行为由回归测试和固定基线差分验证，而不再要求这些预算适配文件逐字不变。Dockerfile、Compose、deploy、API/CLI命令、模型/思考默认值、提示词与发布规则未改。详见 `docs/evaluate.md`。
