@@ -32,7 +32,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ("A1", "B0", "B1", "B2")
 MODEL_FIELDS = ("model", "base_url", "api_style", "thinking", "effort", "review_effort",
                 "diagram_thinking", "max_tokens", "solve_max_tokens", "review_max_tokens",
-                "source_max_tokens", "max_calls", "max_repairs", "job_timeout", "ocr_profile", "ocr_timeout")
+                "source_max_tokens", "max_calls", "max_repairs", "job_timeout", "ocr_profile", "ocr_timeout",
+                "test_mode", "output_limit_policy")
 IMAGE_NAME = re.compile(r"^(\d+)(答案)?\.(png|jpg|jpeg|webp)$", re.IGNORECASE)
 
 
@@ -258,8 +259,12 @@ def report(root: Path) -> dict:
                            "not_run": sum(r["status"] == "not_run" for r in values),
                            "failed_or_unknown": sum(r["status"] not in {"completed", "not_run"} for r in values),
                            "completed_latency_median_seconds": statistics.median(seconds) if seconds else None}
-    summary = {"runs": rows, "groups": groups, "warnings": warnings,
+    summary = {"test_mode": plan.get("test_mode", "standard"), "runs": rows, "groups": groups, "warnings": warnings,
                "note": "完成≠数学正确；时延中位数仅统计完成项，失败/未运行数量另列。未完成人工评审，不宣称正确率或提速达标。"}
+    if summary["test_mode"] == "diagnostic":
+        summary["note"] = "诊断模式：无整题截止，180秒为软标记；不代表限时验收通过。" + summary["note"]
+    for row in rows:
+        row["completed_within_180s"] = row["status"] == "completed" and row["seconds"] is not None and row["seconds"] <= 180
     atomic_json(root / "summary.json", summary)
     headers = ["题号", "配置", "状态", "秒", "模型请求", "输出Token", "失败原因", "结果"]
     md = ["# 本地对照测试", "", summary["note"], "", "| " + " | ".join(headers) + " |",
@@ -316,9 +321,17 @@ configurations = []
 for profile in config['profiles']:
     os.environ.clear(); os.environ.update(base); os.environ.update(overrides(profile))
     os.environ.update(REDIS_URL='', AGENT_DATA_DIR=str(Path(tempfile.gettempdir()) / 'pc-learning-preflight'))
-    settings = Settings()
+    if config.get('diagnostic'):
+        from benchmarks.diagnostic_mode import create_settings
+        settings = create_settings()
+    else:
+        settings = Settings()
     configurations.append({"profile": profile, **{key: getattr(settings, key) for key in
         ("max_tokens", "solve_max_tokens", "thinking", "effort", "compact_tools")}})
+    if config.get('diagnostic'):
+        configurations[-1].update(diagnostic_mode=True, max_tokens=None, solve_max_tokens=None,
+                                 http_timeout=settings.http_timeout, max_calls=settings.max_calls,
+                                 max_repairs=settings.max_repairs)
 for name in config['images']:
     with Image.open(name) as image:
         image.verify()
@@ -338,6 +351,7 @@ print('PREFLIGHT_OK')
 
 def preflight(env: dict[str, str], plan: dict) -> None:
     payload = {"profiles": plan["profiles"], "images": sorted({r[k] for r in plan["runs"] for k in ("question", "answer") if r[k]})}
+    payload["diagnostic"] = plan.get("test_mode") == "diagnostic"
     try:
         checked = subprocess.run([sys.executable, "-c", PREFLIGHT], cwd=ROOT, env=env,
                                  input=json.dumps(payload), text=True, stdout=subprocess.PIPE,
@@ -350,8 +364,13 @@ def preflight(env: dict[str, str], plan: dict) -> None:
     for line in checked.stdout.splitlines():
         if line.startswith("PREFLIGHT_CONFIG="):
             configs = json.loads(line.split("=", 1)[1])
-            for message in budget_messages(configs):
-                print(message, flush=True)
+            for cfg in configs:
+                if cfg.get("diagnostic_mode"):
+                    print(f"{cfg['profile']}: 诊断模式，无整题/阶段截止；不传输出上限（服务端默认，非无限）；"
+                          f"网络无响应保护 {cfg['http_timeout']} 秒；调用上限 {cfg['max_calls']}；修复上限 {cfg['max_repairs']}。", flush=True)
+                else:
+                    for message in budget_messages([cfg]):
+                        print(message, flush=True)
 
 
 @contextmanager
@@ -412,6 +431,8 @@ def execute(plan: dict, out: Path, env: dict[str, str]) -> int:
             directory = out / item["relative_dir"]
             command = [sys.executable, "-m", "benchmarks.run", "--profile", item["profile"],
                        "--case-id", item["case_id"], "--question", item["question"], "--out", str(directory), "--allow-paid"]
+            if plan.get("test_mode") == "diagnostic":
+                command += ["--diagnostic"]
             if item["answer"]:
                 command += ["--answer", item["answer"]]
             print(f"[{index}/{len(plan['runs'])}] 题 {item['case_id']} / {item['profile']} 开始（Ctrl+C 停止后续任务）", flush=True)
@@ -457,14 +478,15 @@ def main(argv=None) -> int:
     parser.add_argument("--data-dir", type=Path, default=ROOT / "tests/test-items")
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
     parser.add_argument("--without-answer", action="store_true", help="显式只用题图，不发送答案图")
+    parser.add_argument("--diagnostic", action="store_true", help="完整流程诊断：无整题截止、不传输出上限；仍需 --run 才付费")
     parser.add_argument("--run", action="store_true", help="授权本轮所列的新任务调用真实模型；可能收费，不自动重试")
     parser.add_argument("--out", type=Path, help="本轮全新输出目录，禁止覆盖/恢复")
     parser.add_argument("--report", type=Path, help="仅重建已运行目录的汇总，不调用模型，也不重跑任务")
     args = parser.parse_args(argv)
     try:
         if args.report:
-            if args.run:
-                raise ValueError("--report 不能与 --run 同时使用。")
+            if args.run or args.diagnostic:
+                raise ValueError("--report 不能与 --run/--diagnostic 同时使用；沿用报告原模式。")
             report(args.report.resolve())
             print(args.report.resolve() / "summary.html")
             return 0
@@ -473,6 +495,10 @@ def main(argv=None) -> int:
             raise ValueError("配置必须为 A1,B0,B1,B2 的不重复列表。")
         cases = discover(args.data_dir.resolve(), args.cases or ["01"], args.without_answer)
         plan = make_plan(cases, profiles)
+        plan["test_mode"] = "diagnostic" if args.diagnostic else "standard"
+        if args.diagnostic:
+            print("诊断模式：180 秒只标记、不终止；无整题/阶段截止，不传模型输出额度（仍受服务端默认限制）。"
+                  "保留工具/网络保护、调用和修复上限；真实失败不跳过，运行更久可能增加费用。")
         print(f"题目 {len(cases)} 道；配置 {','.join(profiles)}；共 {len(plan['runs'])} 个全新任务，严格串行，不自动重试。")
         for case in cases:
             print(f"  {case.id}: {case.question.name} + {case.answer.name if case.answer else '不传答案'}")

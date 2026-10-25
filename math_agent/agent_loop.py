@@ -26,7 +26,8 @@ def run_loop(request, messages, tools, dispatch, audit, stage, error_type, remai
         if state['turns'] >= 4:
             raise error_type('本阶段工具往返超过上限')
         audit('agent_node', {'stage': stage, 'node': 'model', 'turn': state['turns'] + 1})
-        time_final = remaining_seconds is not None and remaining_seconds() < 55
+        seconds_left = remaining_seconds() if remaining_seconds is not None else None
+        time_final = seconds_left is not None and seconds_left < 55
         final_turn = time_final or state['turns'] == 3 or (remaining_calls is not None and remaining_calls() <= 1)
         history = state['history']
         if final_turn:

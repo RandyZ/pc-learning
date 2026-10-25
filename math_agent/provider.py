@@ -221,6 +221,9 @@ class DeepSeek:
         body = {"model": self.settings.model, "messages": history,
                 "max_tokens": tokens,
                 "thinking": {"type": "enabled" if thinking else "disabled"}}
+        if getattr(self.settings, "diagnostic_mode", False):
+            body.pop("max_tokens")
+            tokens = None  # Audit the actual wire policy, not the inactive .env cap.
         if type(json_mode) is not bool:raise ValueError("json_mode必须为布尔值")
         if json_mode:body["response_format"] = {"type": "json_object"}
         if thinking:
@@ -322,6 +325,9 @@ class DeepSeek:
             payload = body(replace(self.settings, max_tokens=tokens,effort=self.effort_for_stage(stage)), history, schema, tools, tool_choice, thinking,
                            strict=(stage in {'solve','diagram'} and self.settings.solve_responses
                                    or stage=='review' and self.settings.review_responses))
+            if getattr(self.settings, "diagnostic_mode", False):
+                payload.pop("max_output_tokens", None)
+                tokens = None
             check_body(payload)
         except ValueError as exc:
             if self._budget_lease is not None:self._budget_lease.record_not_sent('responses_schema_or_payload_preflight')

@@ -24,16 +24,17 @@ def make_context(runner):
         raise ValueError("V2 requires a fresh task; no implicit replay of a classic paid attempt")
     if runner.settings.workflow != "evidence_v2":
         raise ValueError("V2 must be explicitly selected")
+    diagnostic = getattr(runner.settings, "diagnostic_mode", False)
     input_hash = input_identity(runner)
     config = effective(runner.settings)
     code_hash = code_identity()
     write_json(runner.directory / "effective-config.json", config)
     write_json(runner.directory / "run-manifest.json", {"workflow_version": "evidence-v2.1",
         "input_hash": input_hash, "code_hash": code_hash, "config_hash": digest(config),
-        "task_deadline_seconds": runner.settings.job_timeout, "automatic_paid_retry": False})
+        "task_deadline_seconds": None if diagnostic else runner.settings.job_timeout, "automatic_paid_retry": False})
     # Model concurrency stays one; parallel V2 branches are local math/browser work.
     runner.shared_budget = ParallelBudget(runner.settings.max_calls,
-        deadline=runner.started + runner.settings.job_timeout, max_concurrency=1)
+        deadline=None if diagnostic else runner.started + runner.settings.job_timeout, max_concurrency=1)
     runner.provider.shared_budget = runner.shared_budget
     runner.provider = ModelGateway(runner.provider, runner.job_id, runner.audit)
     trace = SafeTrace(runner.job_id, runner.settings.v2_profile)
@@ -42,7 +43,11 @@ def make_context(runner):
     publisher = Publisher(runner, input_hash, cache_key)
     ctx = Context(runner, None, None, trace, input_hash, publisher)
     ctx.solver = PlanSolver(runner, ctx.check)
-    ctx.executor = ReceiptExecutor(runner.audit, ctx.check, ctx.remaining,
+    def math_allowance():
+        remaining = ctx.remaining()
+        # No job deadline does not remove the mathematical subprocess watchdog.
+        return 12.0 if remaining is None else remaining
+    ctx.executor = ReceiptExecutor(runner.audit, ctx.check, math_allowance,
                                   reuse=runner.settings.v2_profile == "parallel_reuse")
     return ctx
 

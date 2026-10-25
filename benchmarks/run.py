@@ -35,6 +35,8 @@ def main(argv=None):
     parser.add_argument('--out',type=Path,required=True,help='New isolated directory, must not already exist')
     parser.add_argument('--prepare-only',action='store_true',help='Prepare a fresh local task without any model call')
     parser.add_argument('--allow-paid',action='store_true',help='Explicit authorization for one bounded new task')
+    parser.add_argument('--diagnostic',action='store_true',
+        help='No whole-job deadline or client output cap; provider and safety limits remain')
     args=parser.parse_args(argv)
     if not args.prepare_only and not args.allow_paid:
         parser.error('no model request is made without --allow-paid; use --prepare-only for offline setup')
@@ -48,7 +50,11 @@ def main(argv=None):
     out.mkdir(parents=True,exist_ok=False,mode=0o700)
     os.environ.update(overrides(args.profile))
     os.environ.update(AGENT_DATA_DIR=str(out/'runtime'),REDIS_URL='')
-    cfg=Settings()
+    if args.diagnostic:
+        from .diagnostic_mode import create_settings
+        cfg=create_settings()
+    else:
+        cfg=Settings()
     store=Store(cfg.data_dir)
     job,directory=store.prepare()
     images=[]
@@ -64,6 +70,7 @@ def main(argv=None):
     except (OSError,subprocess.SubprocessError):commit=None;dirty=None
     manifest={'case_id':args.case_id,'profile':args.profile,'job_id':job,'commit':commit,'dirty':dirty,
         'code_hash':code_identity(),'effective_config':config,'end_to_end':True,'application_cache':False,
+        'test_mode':'diagnostic' if args.diagnostic else 'standard','soft_target_seconds':180,
         'provider_prefix_cache':'record actual returned usage; not claimed disabled',
         'input_hash':digest({'text':args.text,'images':[{'role':i['role'],'sha256':i['sha256']} for i in images]})}
     write_json(out/'manifest.json',manifest)
@@ -72,13 +79,19 @@ def main(argv=None):
     if args.prepare_only:
         print(json.dumps({'status':'prepared','job_id':job,'directory':str(out),'paid_requests':0}))
         return 0
+    if args.diagnostic:
+        write_json(directory/'diagnostic-permission.json', {'job_id':job,'allow_paid':True,'mode':'diagnostic'})
     accepted=store.get(job)['created'];store.claim();started=time.time()
     stopped=False
     def stop(*_):
         nonlocal stopped
         stopped=True
     signal.signal(signal.SIGINT,stop);signal.signal(signal.SIGTERM,stop)
-    supervise(cfg,store,job,lambda:stopped,lambda:None)
+    if args.diagnostic:
+        from .diagnostic_mode import supervise as diagnostic_supervise
+        diagnostic_supervise(cfg,store,job,lambda:stopped,lambda:None)
+    else:
+        supervise(cfg,store,job,lambda:stopped,lambda:None)
     row=store.get(job)
     report=json.loads((directory/'report.json').read_text()) if (directory/'report.json').exists() else {}
     audit=json.loads((directory/'audit.json').read_text()) if (directory/'audit.json').exists() else []
@@ -88,6 +101,7 @@ def main(argv=None):
         'execution_seconds':max(0,ready-started),'end_to_end_seconds':max(0,ready-accepted),
         'client_until_supervisor_return_seconds':time.time()-accepted,
         'model_calls':report.get('model_calls_this_job'), 'quality':None,
+        'completed_within_180s':row['status']=='completed' and max(0,ready-accepted)<=180,
         'cost':None,'cost_complete':False,'error_type':None if row['status']=='completed' else 'TaskNotCompleted',
         'ocr_cache_hits':[x.get('cache_hit') for x in audit if x['kind']=='ocr' and x.get('status')=='done'],
         'perf':summarize({'status':row['status'],'seconds':max(0,ready-started),'audit':audit})}
