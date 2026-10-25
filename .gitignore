@@ -38,3 +38,6 @@ dist/
 # Local graph diagnostics (may contain private task data)
 .classic-debug/
 .langgraph_api/
+
+# Local batch evaluations (input copies and model output are private)
+/eval-runs/
