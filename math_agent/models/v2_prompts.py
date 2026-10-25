@@ -3,14 +3,18 @@ import base64
 import json
 from ..prompts import COMMON, PARAMETER_RULE
 
-VERSION = "evidence-v2-prompts-1"
+VERSION = "evidence-v2-prompts-2"
 SOLVE = '''你正在生成完整初中数学交互讲解。只提交符合Schema的JSON。
 每个小问一次提交proof、computations和scene，不单独输出网页或重复生成展示正文。
 proof步骤包含稳定id；basis_ids只引用原题C编号或此前的Q编号:步骤id，不能以目标证明目标。
 保留全部证明、分类、定义域与边界，优先采用可核验的初中方法；计算器不是一般几何证明器。
 computations是一批待执行的受限符号计算/检查计划，不是已完成证据。关键代入、等价式与端点尽量一次列全。
 变量的positive/nonnegative/nonzero假设必须来自题设/已论证步骤；不能为了检查通过增加假设。
-equivalent/substitute_check填写expected；solve填写equations和variables；其他操作填写expression。
+evaluate可直接计算常量，例如expression="1/(-1)"，此时不需要variables/substitutions；有声明变量时须全部显式代入。
+simplify/evaluate可选expected；提供后会实际检查等式，错误期望值返回fail，不能删除该断言来凑通过。
+equivalent/substitute_check必须填写expected；substitute_check必须有实际substitutions；solve填写equations和variables，不填expected。
+例如验证(m^2+2*m)/m=m+2，可用simplify加expected="m+2"及variables={"m":"nonzero"}，前提m≠0仍须有依据。
+同问引用也优先写完整形式，如Q1:q1_line，不要引用目标自身；跨问引用须明确Q编号。
 每项target_step_id指本问被检查的步骤；basis_ids不得引用该步骤本身或后续步骤。
 input_refs把局部变量名绑定到全局计算ID，必须同时声明depends_on；不能形成循环。
 scene可以使用已有原生objects，也可以用rotate_polygon/translate_polygon/reflect_group/function_with_moving_point。
@@ -24,6 +28,7 @@ PATCH = '''只输出ChangeSet，不重新生成整题。expected_candidate_revis
 只能修改allowed_fields授权的小问/字段。图形修订不能修改proof或computations；数学修订不能改原题或无授权的scene。
 修改字段提供完整的新值；未改字段省略。步骤id尽量稳定，内容变更仍产生新版本并重新审核。
 修正错误的计算计划须说明原错误原因；不得删除真实未决问题来凑通过。
+simplify/evaluate中的expected也是必须保留并重验的断言；常量evaluate不要求变量替换。
 '''
 
 

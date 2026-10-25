@@ -13,7 +13,7 @@ import sys
 from ..domain.v2 import Operation
 from ..tool_math import expression
 
-VERSION = "sympy-plan-v2.1"
+VERSION = "sympy-plan-v2.2"
 RESERVED = {"pi", "PI", "sqrt", "root", "abs", "sin", "cos", "tan", "frac", "Rational", "SQRT2", "SQRT3"}
 
 
@@ -103,12 +103,13 @@ def evaluate(raw, inputs=None):
             missing = sorted(set(missing + [f"{value}: real"]))
         result = {"domain_restrictions": missing, **(extra or {})}
         if value is not None:
-            result.update(exact=str(value), scalar=bool(not missing and value.is_number and value.is_real is True and value.is_finite is True))
+            result.update(exact=str(value), scalar=bool(not missing and value.is_number and value.is_real is True and value.is_finite is True
+                                                  and (op.expected is None or check is True)))
         verdict = "unknown" if missing else ("pass" if check is True else "fail" if check is False else "unknown")
-        if op.op not in {"equivalent", "substitute_check"} and not missing:
+        if op.expected is None and not missing:
             verdict = "pass"  # Calculation completed; scope explicitly isn't proof.
         return {"execution_status": "ok", "verdict": verdict,
-                "scope": "symbolic_under_assumptions" if op.op in {"equivalent", "substitute_check"} else "calculation",
+                "scope": "symbolic_under_assumptions" if op.expected is not None else "calculation",
                 "result": result}
 
     if op.op == "solve":
@@ -141,10 +142,17 @@ def evaluate(raw, inputs=None):
         # Check the original domain before simplifying/substituting the expression.
         restrictions(substitutions)
         value = value.subs(substitutions, simultaneous=True)
-    if op.op in {"equivalent", "substitute_check"}:
+    if op.expected is not None:
         expected = parse(op.expected).subs(substitutions, simultaneous=True)
+        # Inspect both sides before their subtraction can hide a non-real value.
+        row(value)
+        row(expected)
         difference = s.simplify(value - expected)
-        return row(difference, check=difference.is_zero, extra={"expected": str(expected), "claim": "equality under the declared assumptions"})
+        # evaluate/simplify still return the calculated value, not the equality
+        # residual (zero). A failed/unknown assertion cannot feed scene scalars.
+        result_value = s.simplify(value) if op.op in {"evaluate", "simplify"} else difference
+        return row(result_value, check=difference.is_zero, extra={"expected": str(expected),
+            "difference": str(difference), "claim": "equality under the declared assumptions"})
     return row(s.simplify(value))
 
 

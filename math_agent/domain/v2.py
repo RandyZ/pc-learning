@@ -59,10 +59,16 @@ class Operation(Data):
     target_step_id: ID
     basis_ids: list[str] = Field(min_length=1, max_length=30)
     expression: Expression | None = None
-    expected: Expression | None = None
+    expected: Expression | None = Field(default=None, description=(
+        "Required for equivalent/substitute_check; optional for simplify/evaluate. "
+        "When provided it is an equality assertion that is checked, never ignored. "
+        "Not supported for solve/endpoints."))
     equations: list[Expression] = Field(default_factory=list, max_length=6)
     variables: dict[ID, Literal["real", "positive", "nonnegative", "nonzero"]] = Field(default_factory=dict, max_length=4)
-    substitutions: dict[ID, Scalar] = Field(default_factory=dict, max_length=4)
+    substitutions: dict[ID, Scalar] = Field(default_factory=dict, max_length=4, description=(
+        "evaluate: omit for constant expressions; substitute every declared variable "
+        "when variables are present. substitute_check: at least one explicit substitution. "
+        "Other operations do not accept substitutions."))
     domains: dict[ID, Interval] = Field(default_factory=dict, max_length=4)
     input_refs: dict[ID, ID] = Field(default_factory=dict, max_length=8)
     depends_on: list[ID] = Field(default_factory=list, max_length=12)
@@ -74,10 +80,15 @@ class Operation(Data):
                 raise ValueError("solve requires variables/equations, not expression")
         elif self.expression is None or self.equations:
             raise ValueError("this operation requires expression, not equations")
-        if (self.op in {"equivalent", "substitute_check"}) != (self.expected is not None):
-            raise ValueError("only equivalent/substitute_check require expected")
-        if self.op in {"evaluate", "substitute_check"} and not self.substitutions:
-            raise ValueError("evaluation requires explicit substitutions")
+        if self.op in {"equivalent", "substitute_check"} and self.expected is None:
+            raise ValueError("equivalent/substitute_check require expected")
+        if self.op in {"solve", "endpoints"} and self.expected is not None:
+            raise ValueError("expected is not supported for solve/endpoints")
+        if self.op == "substitute_check" and not self.substitutions:
+            raise ValueError("substitute_check requires explicit substitutions")
+        if self.op == "evaluate" and set(self.variables) - set(self.substitutions):
+            raise ValueError("evaluate requires substitutions for every declared variable; "
+                             "constant expressions need no substitutions")
         if self.op not in {"evaluate", "substitute_check"} and self.substitutions:
             raise ValueError("substitutions are not accepted for this operation")
         if not set(self.substitutions) <= set(self.variables) or not set(self.domains) <= set(self.variables):

@@ -1,8 +1,8 @@
 """Propose all three plans in one stage; one bounded format-only correction."""
 from __future__ import annotations
 
-from ..domain.v2 import Draft, ChangeSet
-from ..policies.v2 import validate_draft, apply_changes
+from ..domain.v2 import Draft, ChangeSet, digest
+from ..policies.v2 import validate_draft, apply_changes, normalize_step_references
 from ..models.v2_prompts import messages
 from ..tools import DEFINITIONS
 from ..image_tools import VIEW_REGION
@@ -42,8 +42,14 @@ class PlanSolver:
         for attempt in range(2):
             raw = self._request("solve", payload, schema, correction=bool(attempt))
             try:
-                draft = Draft.model_validate(raw)
+                parsed = Draft.model_validate(raw)
+                draft, rewrites = normalize_step_references(source, parsed)
                 validate_draft(source, draft)
+                if rewrites:
+                    self.runner.audit("reference_normalization", {"stage": "solve",
+                        "before_sha256": digest(parsed), "after_sha256": digest(draft),
+                        "rewrites": rewrites,
+                        "detail": "Only exact unique step IDs were qualified; raw model output is retained."})
                 return draft
             except ValueError as exc:
                 self.runner.audit("contract_error", {"stage": "solve", "attempt": attempt + 1, "detail": str(exc)[:4000]})

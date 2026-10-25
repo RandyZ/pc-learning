@@ -38,6 +38,38 @@ def closure(ids, dependencies):
     return result
 
 
+
+def normalize_step_references(source: Source, draft: Draft):
+    """Qualify only exact, globally unique step IDs; never guess a dependency.
+
+    Source condition IDs take precedence. Unknown/ambiguous refs remain intact
+    so the existing source-order/self/future-reference validator rejects them.
+    The raw model output stays on disk; the caller audits the exact rewrites.
+    """
+    conditions = {c.id for c in source.conditions}
+    owners = {}
+    for qid, question in draft.questions.items():
+        for step in question.proof.steps:
+            owners.setdefault(step.id, []).append(f"{qid}:{step.id}")
+    normalized = draft.model_copy(deep=True)
+    changes = []
+    def qualify(record, path):
+        for index, basis in enumerate(record.basis_ids):
+            candidates = owners.get(basis, [])
+            if basis not in conditions and ":" not in basis and len(candidates) == 1:
+                qualified = candidates[0]
+                record.basis_ids[index] = qualified
+                changes.append({"path": f"{path}.basis_ids.{index}", "from": basis, "to": qualified})
+    for qid, question in normalized.questions.items():
+        for index, step in enumerate(question.proof.steps):
+            qualify(step, f"questions.{qid}.proof.steps.{index}")
+        for index, operation in enumerate(question.computations):
+            qualify(operation, f"questions.{qid}.computations.{index}")
+        for index, macro in enumerate(question.scene.constructions):
+            qualify(macro, f"questions.{qid}.scene.constructions.{index}")
+    return normalized, changes
+
+
 def validate_draft(source: Source, draft: Draft) -> None:
     ids = [q.id for q in source.questions]
     if set(draft.questions) != set(ids):
@@ -154,14 +186,14 @@ def apply_changes(source, previous, change: ChangeSet, revision, issues):
                 raise ValueError("a patch cannot drop a computational obligation; correct it with the same ID")
             updated_ops = {o["id"]: o for o in fields["computations"]}
             for old in previous.questions[qid].computations:
-                if old.op in {"equivalent", "substitute_check"} and updated_ops[old.id]["op"] not in {"equivalent", "substitute_check"}:
+                if old.expected is not None and updated_ops[old.id].get("expected") is None:
                     raise ValueError("a check cannot be downgraded to an unchecked calculation")
         raw["questions"][qid].update(copy.deepcopy(fields))
         if raw["questions"][qid] != previous.questions[qid].model_dump():
             changed.add(qid)
     if not changed:
         raise ValueError("patch makes no change")
-    current = Draft.model_validate(raw)
+    current, normalization = normalize_step_references(source, Draft.model_validate(raw))
     validate_draft(source, current)
     old_deps, new_deps = question_dependencies(previous), question_dependencies(current)
     affected = set(changed)
@@ -171,4 +203,5 @@ def apply_changes(source, previous, change: ChangeSet, revision, issues):
             break
         affected |= more
     return current, {"changed_questions": sorted(changed), "affected_questions": sorted(affected),
+        "reference_normalization": normalization,
         "review_policy": "full independent review; only exact computational receipts may be reused"}
