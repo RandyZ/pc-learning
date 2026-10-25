@@ -34,3 +34,9 @@ dist/
 *.tar
 *.tar.gz
 *.tgz
+
+# Isolated development runs / local Studio
+.studio-runs/
+.langgraph_api/
+benchmark-runs/
+test-results.xml

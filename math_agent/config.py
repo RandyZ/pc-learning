@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @dataclass(frozen=True)
 class Settings:
+    workflow: str = field(default_factory=lambda: os.getenv("AGENT_WORKFLOW", "classic"))
+    v2_profile: str = field(default_factory=lambda: os.getenv("AGENT_V2_PROFILE", "serial"))
     data_dir: Path = field(default_factory=lambda: Path(os.getenv("AGENT_DATA_DIR", str(ROOT / "data"))))
     api_key: str = field(default_factory=lambda: os.getenv("DEEPSEEK_API_KEY", ""), repr=False)
     access_token: str = field(default_factory=lambda: os.getenv("AGENT_ACCESS_TOKEN", ""), repr=False)
@@ -48,6 +50,17 @@ class Settings:
     cache_ttl: int = field(default_factory=lambda: int(os.getenv("AGENT_CACHE_TTL", "604800")))
 
     def __post_init__(self):
+        if self.workflow not in {"classic", "evidence_v2"}:
+            raise ValueError("AGENT_WORKFLOW must be classic or evidence_v2")
+        if self.v2_profile not in {"serial", "parallel", "parallel_reuse"}:
+            raise ValueError("AGENT_V2_PROFILE must be serial, parallel or parallel_reuse")
+        if self.workflow == "evidence_v2":
+            if self.api_style != "deepseek" or not self.compact_tools:
+                raise ValueError("V2 requires DeepSeek and AGENT_COMPACT_TOOLS=true")
+            if any((self.reference_mode, self.review_plan, self.solve_draft,
+                    self.parallel_questions, self.parallel_review, self.overlap_ocr,
+                    self.incremental_review, self.incremental_math_review)):
+                raise ValueError("V2 first-release experiments cannot mix reference/draft/parallel-model/OCR-overlap/incremental-review flags")
         if self.parallel_review and (not self.compact_tools or self.reference_mode or self.review_plan or self.api_style!='deepseek'):
             raise ValueError('分问复核仅支持compact classic流程，不能叠加reference或review_plan')
         if self.parallel_review and self.incremental_review:
