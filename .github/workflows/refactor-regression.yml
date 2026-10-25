@@ -1,0 +1,56 @@
+name: Refactor regression
+on:
+  push:
+    branches: [refactor/langgraph-latency-observability]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: refactor-regression-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEEPSEEK_API_KEY: ''
+      LANGSMITH_TRACING: 'false'
+      LANGCHAIN_TRACING_V2: 'false'
+      MATH_AGENT_BROWSER_TEST: '1'
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd 'redis-cli ping'
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Snapshot reviewed source
+        run: git archive --format=zip --output=source-snapshot.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-snapshot
+          path: source-snapshot.zip
+          retention-days: 3
+      - name: Install locked dependencies
+        run: python -m pip install -c constraints.txt -e '.[test]'
+      - name: Install browser
+        run: python -m playwright install --with-deps chromium
+      - name: Run offline regression (no paid model calls)
+        run: python -m pytest -q --junitxml=test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-results
+          path: test-results.xml
+          if-no-files-found: ignore
+          retention-days: 7
