@@ -27,6 +27,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Archive tracked source for reproducible regression
+        run: git archive --format=zip --output=source-snapshot.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: refactor-source
+          path: source-snapshot.zip
+          retention-days: 1
       - name: Check deployment, model strategies and V2 are untouched
         run: >-
           git diff --exit-code d23b43549e5a897a6e348da130b546c6f10b80db --
