@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -16,10 +17,38 @@ import time
 from math_agent.config import Settings, ROOT
 
 
+# These values only keep inherited numeric fields usable by existing adapters.
+# Diagnostic transport omits all output caps and its supervisor has no deadline.
+# Never parse inactive .env settings through Settings' integer default factories.
+INACTIVE_LIMITS = {
+    "job_timeout": ("AGENT_JOB_TIMEOUT", 240),
+    "max_tokens": ("DEEPSEEK_MAX_TOKENS", 12000),
+    "source_max_tokens": ("DEEPSEEK_SOURCE_MAX_TOKENS", 8000),
+    "solve_max_tokens": ("DEEPSEEK_SOLVE_MAX_TOKENS", 0),
+    "review_max_tokens": ("DEEPSEEK_REVIEW_MAX_TOKENS", 0),
+}
+
+
+def _inactive_value(value):
+    """Record numeric policy inputs, never arbitrary environment text or secrets."""
+    if value is None:
+        return None
+    if type(value) is int and -(2**63) <= value < 2**63:
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if re.fullmatch(r"[+-]?[0-9]{1,18}", text):
+            return int(text)
+        if not text:
+            return "[empty; ignored]"
+    return "[not a supported integer; ignored]"
+
+
 @dataclass(frozen=True)
 class DiagnosticSettings(Settings):
     # Not read from .env: normal API/Worker/CLI cannot accidentally enable it.
     diagnostic_mode: bool = field(default=True, init=False)
+    _inactive_configured_limits: dict = field(default_factory=dict, repr=False, compare=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -32,9 +61,17 @@ class DiagnosticSettings(Settings):
 
 
 def create_settings(**overrides) -> DiagnosticSettings:
-    # These are declared test-policy overrides, not silent production changes.
+    # Normalize only inactive policies BEFORE inherited factories and validation.
+    # Valid protections (calls, repairs, OCR and network) remain fully validated.
+    values = dict(overrides)
+    recorded = {}
+    for name, (variable, placeholder) in INACTIVE_LIMITS.items():
+        configured = values.pop(name) if name in values else os.getenv(variable, placeholder)
+        recorded[name] = _inactive_value(configured)
+        values[name] = placeholder
+    values["_inactive_configured_limits"] = recorded
     return DiagnosticSettings(**{"review_reserve_seconds": 0, "http_timeout": 1200,
-                                 "redis_url": "", **overrides})
+                                 "redis_url": "", **values})
 
 
 def supervise(settings, store, job_id, stop, heartbeat, command=None):

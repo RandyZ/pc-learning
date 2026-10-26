@@ -7,6 +7,22 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _env_int(name: str, default: str) -> int:
+    try:
+        return int(os.getenv(name, default))
+    except (ValueError, TypeError):
+        # Do not echo arbitrary environment contents; name the offending field.
+        raise ValueError(f"{name} 必须为整数；请检查 .env 和同名环境变量") from None
+
+
+def _require_range(value, name: str, low: int, high: int, *, allow_zero=False):
+    if type(value) is int and (low <= value <= high or allow_zero and value == 0):
+        return
+    expected = f"0（沿用全局）或{low}～{high}" if allow_zero else f"{low}～{high}"
+    shown = str(value) if type(value) is int and -(2**63) <= value < 2**63 else "非有效整数"
+    raise ValueError(f"{name} 必须为{expected}的整数；当前值：{shown}")
+
+
 @dataclass(frozen=True)
 class Settings:
     workflow: str = field(default_factory=lambda: os.getenv("AGENT_WORKFLOW", "classic"))
@@ -26,7 +42,7 @@ class Settings:
     compact_tools: bool = field(default_factory=lambda: os.getenv("AGENT_COMPACT_TOOLS", "false").lower() == "true")
     parallel_questions: bool = field(default_factory=lambda: os.getenv("AGENT_PARALLEL_QUESTIONS", "false").lower() == "true")
     parallel_review: bool = field(default_factory=lambda: os.getenv("AGENT_PARALLEL_REVIEW", "false").lower() == "true")
-    question_concurrency: int = field(default_factory=lambda: int(os.getenv("AGENT_QUESTION_CONCURRENCY", "2")))
+    question_concurrency: int = field(default_factory=lambda: _env_int("AGENT_QUESTION_CONCURRENCY", "2"))
     solve_draft: bool = field(default_factory=lambda: os.getenv("AGENT_SOLVE_DRAFT", "false").lower() == "true")
     review_plan: bool = field(default_factory=lambda: os.getenv("AGENT_REVIEW_PLAN", "false").lower() == "true")
     reference_mode: bool = field(default_factory=lambda: os.getenv("AGENT_REFERENCE_MODE", "false").lower() == "true")
@@ -34,20 +50,20 @@ class Settings:
     diagram_thinking: bool = field(default_factory=lambda: os.getenv("DEEPSEEK_DIAGRAM_THINKING", "false").lower() == "true")
     effort: str = field(default_factory=lambda: os.getenv("DEEPSEEK_REASONING_EFFORT", "high"))
     review_effort: str = field(default_factory=lambda: os.getenv("AGENT_REVIEW_EFFORT", ""))
-    max_tokens: int = field(default_factory=lambda: int(os.getenv("DEEPSEEK_MAX_TOKENS", "12000")))
-    solve_max_tokens: int = field(default_factory=lambda: int(os.getenv("DEEPSEEK_SOLVE_MAX_TOKENS", "0")))
-    review_max_tokens: int = field(default_factory=lambda: int(os.getenv("DEEPSEEK_REVIEW_MAX_TOKENS", "0")))
-    review_reserve_seconds: int = field(default_factory=lambda: int(os.getenv("AGENT_REVIEW_RESERVE_SECONDS", "0")))
-    source_max_tokens: int = field(default_factory=lambda: int(os.getenv("DEEPSEEK_SOURCE_MAX_TOKENS", "8000")))
+    max_tokens: int = field(default_factory=lambda: _env_int("DEEPSEEK_MAX_TOKENS", "12000"))
+    solve_max_tokens: int = field(default_factory=lambda: _env_int("DEEPSEEK_SOLVE_MAX_TOKENS", "0"))
+    review_max_tokens: int = field(default_factory=lambda: _env_int("DEEPSEEK_REVIEW_MAX_TOKENS", "0"))
+    review_reserve_seconds: int = field(default_factory=lambda: _env_int("AGENT_REVIEW_RESERVE_SECONDS", "0"))
+    source_max_tokens: int = field(default_factory=lambda: _env_int("DEEPSEEK_SOURCE_MAX_TOKENS", "8000"))
     ocr_url: str = field(default_factory=lambda: os.getenv("AGENT_OCR_URL", "").rstrip("/"))
     ocr_profile: str = field(default_factory=lambda: os.getenv("AGENT_OCR_PROFILE", "ppstructure3-v1"))
-    ocr_timeout: int = field(default_factory=lambda: int(os.getenv("AGENT_OCR_TIMEOUT", "240")))
-    job_timeout: int = field(default_factory=lambda: int(os.getenv("AGENT_JOB_TIMEOUT", "240")))
-    max_calls: int = field(default_factory=lambda: int(os.getenv("AGENT_MAX_MODEL_CALLS", "10")))
-    http_timeout: int = field(default_factory=lambda: int(os.getenv("DEEPSEEK_HTTP_TIMEOUT", "300")))
-    max_repairs: int = field(default_factory=lambda: int(os.getenv("AGENT_MAX_REPAIRS", "2")))
+    ocr_timeout: int = field(default_factory=lambda: _env_int("AGENT_OCR_TIMEOUT", "240"))
+    job_timeout: int = field(default_factory=lambda: _env_int("AGENT_JOB_TIMEOUT", "240"))
+    max_calls: int = field(default_factory=lambda: _env_int("AGENT_MAX_MODEL_CALLS", "10"))
+    http_timeout: int = field(default_factory=lambda: _env_int("DEEPSEEK_HTTP_TIMEOUT", "300"))
+    max_repairs: int = field(default_factory=lambda: _env_int("AGENT_MAX_REPAIRS", "2"))
     redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", ""))
-    cache_ttl: int = field(default_factory=lambda: int(os.getenv("AGENT_CACHE_TTL", "604800")))
+    cache_ttl: int = field(default_factory=lambda: _env_int("AGENT_CACHE_TTL", "604800"))
 
     def __post_init__(self):
         if self.workflow not in {"classic", "evidence_v2"}:
@@ -71,12 +87,12 @@ class Settings:
             raise ValueError('小问实验并发只能为1或2')
         if self.parallel_questions and (not self.compact_tools or self.reference_mode or self.solve_draft or self.api_style!='deepseek'):
             raise ValueError('小问并发仅支持compact classic流程，不能叠加reference或solve_draft')
-        if any(v != 0 and not 512 <= v <= 64000 for v in (self.solve_max_tokens, self.review_max_tokens)):
-            raise ValueError("阶段输出额度须为0（沿用全局）或512～64000")
-        if not 0 <= self.review_reserve_seconds <= self.job_timeout - 30:
-            raise ValueError("复核预留时限必须非负，并给前序保留至少30秒")
-        if not 512 <= self.source_max_tokens <= 64000 or not 10 <= self.ocr_timeout <= 600:
-            raise ValueError("OCR时限或读题输出额度超出范围")
+        _require_range(self.solve_max_tokens, "DEEPSEEK_SOLVE_MAX_TOKENS", 512, 64000, allow_zero=True)
+        _require_range(self.review_max_tokens, "DEEPSEEK_REVIEW_MAX_TOKENS", 512, 64000, allow_zero=True)
+        _require_range(self.job_timeout, "AGENT_JOB_TIMEOUT", 30, 3600)
+        _require_range(self.review_reserve_seconds, "AGENT_REVIEW_RESERVE_SECONDS", 0, self.job_timeout - 30)
+        _require_range(self.source_max_tokens, "DEEPSEEK_SOURCE_MAX_TOKENS", 512, 64000)
+        _require_range(self.ocr_timeout, "AGENT_OCR_TIMEOUT", 10, 600)
         if self.ocr_url:
             ocr = urlparse(self.ocr_url)
             if ocr.scheme != "http" or ocr.hostname not in {"127.0.0.1", "localhost", "ocr"} or ocr.username or ocr.password or ocr.query or ocr.fragment or ocr.path:
@@ -86,12 +102,10 @@ class Settings:
             raise ValueError("模型地址必须为 HTTPS，或本机 HTTP 测试地址")
         if not url.hostname or url.username or url.password or url.query or url.fragment:
             raise ValueError("模型地址不能包含凭据、查询或片段")
-        if not 30 <= self.job_timeout <= 3600 or not 1 <= self.max_calls <= 30:
-            raise ValueError("任务时限应为30～3600秒，调用上限应为1～30")
-        if not 0 <= self.max_repairs <= 4 or not 512 <= self.max_tokens <= 64000:
-            raise ValueError("修复次数或输出长度不在支持范围内")
-        if not 30 <= self.http_timeout <= 1200:
-            raise ValueError("单请求HTTP超时须为30～1200秒")
+        _require_range(self.max_calls, "AGENT_MAX_MODEL_CALLS", 1, 30)
+        _require_range(self.max_repairs, "AGENT_MAX_REPAIRS", 0, 4)
+        _require_range(self.max_tokens, "DEEPSEEK_MAX_TOKENS", 512, 64000)
+        _require_range(self.http_timeout, "DEEPSEEK_HTTP_TIMEOUT", 30, 1200)
         if self.effort not in {"low", "high", "max"}:
             raise ValueError("reasoning effort 须为 low/high/max")
         if self.review_effort not in {'','low','high','max'}:

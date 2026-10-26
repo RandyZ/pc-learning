@@ -11,8 +11,9 @@ from benchmarks import diagnostic_mode as mode
 from math_agent.storage import Store, write_json
 
 
+@pytest.mark.parametrize('inactive_value', [None, '65536', ''])
 @pytest.mark.parametrize('workflow', ['classic', 'evidence_v2'])
-def test_actual_diagnostic_child_keeps_policy_and_stops_on_uncertain_source(tmp_path,monkeypatch,workflow):
+def test_actual_diagnostic_child_keeps_policy_and_stops_on_uncertain_source(tmp_path,monkeypatch,workflow,inactive_value):
     seen=[]
     source={'title':'诊断夹具','problem_text':'长度不清楚','conditions':[
         {'id':'C1','text':'线段AB','origin':'question_text','image_ids':[]}],
@@ -34,6 +35,10 @@ def test_actual_diagnostic_child_keeps_policy_and_stops_on_uncertain_source(tmp_
                         'DEEPSEEK_BASE_URL':f'http://127.0.0.1:{server.server_port}',
                         'REDIS_URL':'','AGENT_OCR_URL':'','LANGSMITH_TRACING':'false'}.items():
             monkeypatch.setenv(key,val)
+        if inactive_value is not None:
+            for variable, _ in mode.INACTIVE_LIMITS.values():
+                monkeypatch.setenv(variable, inactive_value)
+            monkeypatch.setenv('AGENT_REVIEW_RESERVE_SECONDS', inactive_value)
         settings=mode.create_settings()
         store=Store(tmp_path);job,directory=store.prepare()
         write_json(directory/'request.json',{'text':'线段AB长度不明','images':[],'force':True})
