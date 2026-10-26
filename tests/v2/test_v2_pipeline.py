@@ -32,6 +32,8 @@ def test_missing_computation_decisions_fail_closed(make_runner,source_v2,draft_v
     assert r.store.get(r.job_id)['status']=='failed'
     assert r.model_calls==3
     assert not r.cache.data
+    assert r.provider.review_bundle is None
+    assert r.provider.operation_basis_map is None
 
 
 def test_bad_source_uncertainty_does_not_solve(make_runner,source_v2):
@@ -108,4 +110,49 @@ def test_native_responses_schema_keeps_extended_review_contract(make_runner,sour
     assert report['status']=='completed',report.get('error')
     assert len(r.sent)==3
     assert r.sent[1]['text']['format']['strict']
+    solve_schema=r.sent[1]['text']['format']['schema']
+    assert solve_schema['properties']['questions']['required']==['Q1']
+    assert solve_schema['$defs']['Proof']['required']==list(solve_schema['$defs']['Proof']['properties'])
     assert 'operation_reviews' in r.sent[2]['text']['format']['schema']['properties']
+
+
+@pytest.mark.parametrize('review_responses',[False,True])
+def test_operation_review_basis_schema_and_prompt_follow_public_order(
+        make_runner,source_v2,draft_v2,review_v2,review_responses):
+    proof=draft_v2['questions']['Q1']['proof']
+    half=proof['steps'][0]
+    half['basis_ids']=['Q1:first']
+    proof['steps']=[
+        {'id':'first','premise':'AB=2','rule':'已知','conclusion':'AB=2','basis_ids':['C1']},
+        half,
+        {'id':'last','premise':'AM=1','rule':'结论','conclusion':'AM=1','basis_ids':['Q1:half']}]
+    draft_v2['questions']['Q1']['computations']=[
+        {'id':'first_check','op':'simplify','target_step_id':'first','basis_ids':['C1'],'expression':'2'},
+        {'id':'half_length','op':'simplify','target_step_id':'half','basis_ids':['Q1:first'],'expression':'2/2'},
+        {'id':'last_check','op':'simplify','target_step_id':'last','basis_ids':['Q1:half'],'expression':'1'}]
+    review_v2['operation_reviews']={
+        'first_check':{'verdict':'pass','method':'receipt','basis_ids':['C1'],'evidence':'核对已知'},
+        'half_length':{'verdict':'pass','method':'receipt','basis_ids':['Q1:S1'],'evidence':'核对中点计算'},
+        'last_check':{'verdict':'pass','method':'receipt','basis_ids':['Q1:S2'],'evidence':'核对结论'}}
+    r=make_runner([source_v2,draft_v2,review_v2],review_responses=review_responses)
+    r.run()
+    report=json.loads((r.directory/'report.json').read_text())
+    assert report['status']=='completed',report.get('error')
+
+    expected={
+        'first_check':('first',['C1']),
+        'half_length':('half',['C1','Q1:S1']),
+        'last_check':('last',['C1','Q1:S1','Q1:S2'])}
+    request=r.sent[2]
+    prompt=(request['messages'][0]['content'] if not review_responses
+            else request['input'][0]['content'])
+    assert '目标自身及后续步骤不可引用' in prompt
+    for oid,(target,allowed) in expected.items():
+        assert f'"{oid}"' in prompt
+        assert f'"target": "Q1:{target}"' in prompt
+        assert json.dumps(allowed,ensure_ascii=False) in prompt
+        if review_responses:
+            schema=request['text']['format']['schema']['properties']['operation_reviews']['properties'][oid]
+            assert schema['properties']['basis_ids']['items']['enum']==allowed
+    assert r.provider.review_bundle is None
+    assert r.provider.operation_basis_map is None

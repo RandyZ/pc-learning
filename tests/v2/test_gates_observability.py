@@ -27,6 +27,23 @@ def test_circular_or_negative_review_cannot_publish(source_v2,draft_v2,review_v2
         operation_issues(source,candidate,draft,bundle,decisions)
 
 
+@pytest.mark.parametrize(('basis_id','error'),[
+    ('Q9:S9','unknown operation-review basis'),
+    ('Q1:S1','own target or a later step'),
+    ('Q1:S2','own target or a later step')])
+def test_operation_review_rejects_unknown_self_and_later_basis(
+        source_v2,draft_v2,review_v2,basis_id,error):
+    draft_v2['questions']['Q1']['proof']['steps'].append({
+        'id':'later','premise':'AM=1','rule':'后续步骤','conclusion':'AM=1','basis_ids':['Q1:half']})
+    source=Source.model_validate(source_v2);draft=Draft.model_validate(draft_v2)
+    candidate,_=compile_candidate(source,draft,{})
+    bundle={'receipts':{'half_length':{'execution_status':'ok','verdict':'pass'}}}
+    decisions=review_v2['operation_reviews']
+    decisions['half_length']['basis_ids']=[basis_id]
+    with pytest.raises(ValueError,match=error):
+        operation_issues(source,candidate,draft,bundle,decisions)
+
+
 def test_unknown_requires_explicit_alternative_proof(source_v2,draft_v2,review_v2):
     source=Source.model_validate(source_v2);draft=Draft.model_validate(draft_v2)
     candidate,_=compile_candidate(source,draft,{})

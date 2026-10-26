@@ -7,12 +7,22 @@ from ..domain.v2 import OperationReview, RevisionReview, prior_issues, digest
 from ..policies.v2 import operations
 
 
+def operation_basis_map(source, candidate, draft):
+    ordered = [f"{q.id}:{step.id}" for q in source.questions for step in draft.questions[q.id].proof.steps]
+    public = [f"{s.question_id}:S{i}" for s in candidate.solutions for i in range(1, len(s.steps) + 1)]
+    conditions = [c.id for c in source.conditions]
+    return {oid: {"target": f"{qid}:{operation.target_step_id}",
+                  "allowed_basis_ids": conditions + public[:ordered.index(f"{qid}:{operation.target_step_id}")]}
+            for oid, (qid, operation) in operations(draft).items()}
+
+
 def operation_issues(source, candidate, draft, bundle, decisions):
     expected = operations(draft)
     if not isinstance(decisions, dict) or set(decisions) != set(expected):
         raise ValueError("operation_reviews must cover exactly the current computation IDs")
     valid_basis = {c.id for c in source.conditions} | {
         f"{s.question_id}:S{i}" for s in candidate.solutions for i in range(1, len(s.steps) + 1)}
+    allowed = operation_basis_map(source, candidate, draft)
     issues = []
     parsed = {}
     for oid, (qid, operation) in expected.items():
@@ -20,10 +30,7 @@ def operation_issues(source, candidate, draft, bundle, decisions):
         if not set(decision.basis_ids) <= valid_basis:
             raise ValueError("unknown operation-review basis")
         # A purported independent proof cannot cite the target itself or a later step.
-        ordered = [f"{q.id}:{step.id}" for q in source.questions for step in draft.questions[q.id].proof.steps]
-        public = [f"{s.question_id}:S{i}" for s in candidate.solutions for i in range(1, len(s.steps) + 1)]
-        prior = {c.id for c in source.conditions} | set(public[:ordered.index(f"{qid}:{operation.target_step_id}")])
-        if not set(decision.basis_ids) <= prior:
+        if not set(decision.basis_ids) <= set(allowed[oid]["allowed_basis_ids"]):
             raise ValueError("operation review cannot assume its own target or a later step")
         receipt = bundle["receipts"][oid]
         if decision.verdict == "pass" and decision.method == "unresolved":
@@ -60,7 +67,9 @@ def revision_issues(source, candidate, bundle, decisions):
 def review(runner, source, candidate, draft, observation, bundle):
     if digest(candidate) != bundle["candidate_hash"]:
         raise ValueError("candidate changed before independent review")
+    allowed = operation_basis_map(source, candidate, draft)
     runner.provider.review_bundle = bundle
+    runner.provider.operation_basis_map = allowed
     runner.provider.operation_reviews = None
     runner.provider.revision_reviews = None
     try:
@@ -72,6 +81,7 @@ def review(runner, source, candidate, draft, observation, bundle):
         additions.extend(pending)
     finally:
         runner.provider.review_bundle = None
+        runner.provider.operation_basis_map = None
     if additions:
         value = value.model_copy(deep=True)
         value.issues.extend(additions)
