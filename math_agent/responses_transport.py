@@ -22,6 +22,19 @@ def check_schema_nodes(schema):
     visit(schema,'#')
 
 
+def strict_schema(schema):
+    result=copy.deepcopy(schema)
+    def visit(node):
+        if 'properties' in node:node['required']=list(node['properties'])
+        for key in ('$defs','$def','properties'):
+            for child in node.get(key,{}).values():visit(child)
+        if 'items' in node:visit(node['items'])
+        for key in ('anyOf','oneOf'):
+            for child in node.get(key,[]):visit(child)
+    visit(result)
+    return result
+
+
 def content_parts(content):
     if isinstance(content,str):return content
     result=[]
@@ -64,8 +77,8 @@ def body(settings,messages,schema,tools=None,tool_choice=None,thinking=True,stri
     check_schema_nodes(schema)
     result={'model':settings.model,'input':input_items(messages),
         'reasoning':{'effort':settings.effort if thinking else 'none'},'max_output_tokens':settings.max_tokens,
-        'text':{'format':{'type':'json_schema','name':'math_agent_output','schema':schema,
-                          'strict':strict}}}
+        'text':{'format':{'type':'json_schema','name':'math_agent_output',
+                          'schema':strict_schema(schema) if strict else schema,'strict':strict}}}
     if tools:result['tools']=[{'type':'function',**copy.deepcopy(t['function'])} for t in tools]
     if tool_choice is not None:result['tool_choice']=tool_choice
     return result

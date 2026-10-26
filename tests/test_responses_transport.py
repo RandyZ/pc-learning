@@ -2,6 +2,44 @@ import pytest
 from math_agent.responses_transport import body,message,input_items
 
 
+def assert_strict_required(schema):
+    if isinstance(schema,dict):
+        if 'properties' in schema:
+            assert schema.get('required')==list(schema['properties'])
+        for value in schema.values():assert_strict_required(value)
+    elif isinstance(schema,list):
+        for value in schema:assert_strict_required(value)
+
+
+def test_strict_schema_recursively_requires_every_property_without_mutating_input(settings):
+    import copy
+    schema={'type':'object','properties':{
+        'items':{'type':'array','items':{'anyOf':[{'$ref':'#/$defs/Item'},{'type':'null'}]}},
+        'mapping':{'type':'object','properties':{'Q1':{'$ref':'#/$defs/Item'}},'additionalProperties':False}},
+        '$defs':{'Item':{'oneOf':[{'type':'object','properties':{'value':{'type':'string'},'optional':{'type':'integer','default':0}},
+            'required':['value'],'additionalProperties':False}]}}}
+    original=copy.deepcopy(schema)
+    sent=body(settings,[],schema,strict=True)
+    assert_strict_required(sent['text']['format']['schema'])
+    assert sent['text']['format']['schema'] is not schema
+    assert schema==original
+
+
+@pytest.mark.parametrize('keyword',['default','const','examples','enum'])
+def test_strict_schema_does_not_rewrite_instance_values(settings,keyword):
+    instances=[{'properties':{'literal':1},'required':['instance']}]
+    value=instances if keyword in {'examples','enum'} else instances[0]
+    schema={'type':'object','properties':{'value':{'type':'object',keyword:value}}}
+    sent=body(settings,[],schema,strict=True)['text']['format']['schema']
+    assert sent['properties']['value'][keyword]==value
+    assert sent['required']==['value']
+
+
+def test_non_strict_schema_is_sent_unchanged(settings):
+    schema={'type':'object','properties':{'optional':{'type':'string','default':'x'}}}
+    assert body(settings,[],schema)['text']['format']['schema']==schema
+
+
 def test_responses_roundtrip_keeps_thinking_tools_and_original_images(settings):
     initial=[{'role':'system','content':'json'}, {'role':'user','content':[{'type':'text','text':'inspect'},
         {'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAC0lEQVR4nGNgQAYAAA4AAamRc7EAAAAASUVORK5CYII='}}]}]

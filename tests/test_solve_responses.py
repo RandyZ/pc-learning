@@ -26,11 +26,13 @@ def test_output_schema_binds_conditions_and_named_ranges(sample):
 
 
 def test_solve_native_keeps_tool_reasoning_and_never_uses_chat(settings,sample):
-    source,candidate,_=sample;schema=output_schema(source);raw=named(pack(candidate));calls=[]
+    from math_agent.responses_transport import strict_schema
+    source,candidate,_=sample;schema=output_schema(source);original=copy.deepcopy(schema);raw=named(pack(candidate));calls=[]
     def handler(req):
         calls.append(req.url.path);b=json.loads(req.content)
         assert req.url.path=='/responses' and b['text']['format']['strict'] is True
-        assert b['text']['format']['schema']==schema
+        assert b['text']['format']['schema']==strict_schema(original)
+        assert schema==original
         if len(calls)==1:
             return httpx.Response(200,json={'status':'completed','output':[
                 {'type':'reasoning','content':[{'type':'reasoning_text','text':'private retained thought'}]},
