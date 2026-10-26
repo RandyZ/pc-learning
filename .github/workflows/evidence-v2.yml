@@ -1,0 +1,46 @@
+name: Evidence V2 regression
+on:
+  push:
+    branches: [feat/evidence-v2-optimized]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: evidence-v2-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEEPSEEK_API_KEY: ''
+      LANGSMITH_TRACING: 'false'
+      LANGCHAIN_TRACING_V2: 'false'
+      MATH_AGENT_BROWSER_TEST: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check production deployment is unchanged
+        run: git diff --exit-code d23b43549e5a897a6e348da130b546c6f10b80db -- Dockerfile compose.yaml deploy/ math_agent/api.py math_agent/cli.py math_agent/worker.py
+      - name: Install locked dependencies
+        run: python -m pip install -c constraints.txt -e '.[test]'
+      - name: Install browser and isolated Redis executable
+        run: |
+          python -m playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y redis-server
+      - name: Run regression with actual Chromium and Redis (mock model HTTP only)
+        run: python -m pytest -q --junitxml=test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-results
+          path: test-results.xml
+          if-no-files-found: ignore
+          retention-days: 7

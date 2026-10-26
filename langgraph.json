@@ -1,0 +1,5 @@
+{
+  "dependencies": ["."],
+  "graphs": {"evidence_v2": "./debug/studio.py:graph"},
+  "env": ".env.debug"
+}

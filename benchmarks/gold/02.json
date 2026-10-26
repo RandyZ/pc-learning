@@ -1,0 +1,112 @@
+{
+  "schema_version": "gold-v1",
+  "case_id": "02",
+  "question_image": {
+    "path": "tests/test-items/02.png",
+    "sha256": "cadccbdac98bae151ff04e6d9adc086cf4b76245e38b4c57e6f65020caaca5e1"
+  },
+  "answer_image": {
+    "path": "tests/test-items/02答案.png",
+    "sha256": "6c78bfdc9a820058ba740e6ae7b362858ad6400b970c23735e7f7a7b6ae61dd2"
+  },
+  "verification_status": "ai_checked_pending_human",
+  "subquestions": [
+    {
+      "id": "1",
+      "kind": "geometry",
+      "final_answer": {"value": "BH⊥DE", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "正方形中AB=AD且AC平分∠BAD，故△ABP≌△ADP(SAS)",
+        "沿AD折叠使△ADP≌△ADE，从而∠ABG=∠ADE",
+        "在直角三角形ABG中∠ABG+∠AGB=90°，结合∠AGB=∠DGH得∠DGH+∠GDH=90°",
+        "所以∠DHG=90°，即BH⊥DE",
+        "坐标复核：取A(0,0)、B(0,-6)、D(6,0)、P(t,-t)，则E(t,t)，(P-B)·(E-D)=t(t-6)+t(6-t)=0"
+      ],
+      "obligations": {
+        "domain": ["按图1的非退化构形证明；折叠只保持长度和角度，不改变原题条件"],
+        "cases": ["P在AC所在直线运动，但本问按图1位置使用射线BP与DE的交点H"],
+        "endpoints": ["若P或交点退化，不能凭空使用不存在的三角形角关系，应单独说明连续性或排除"]
+      },
+      "diagram_requirements": [
+        "正方形ABCD边长为6，P位于AC所在直线；E是P关于AD的对称点",
+        "保留射线BP、直线DE及其交点H、BP与AD所在直线交点G，并标出直角"
+      ],
+      "interaction_requirements": [
+        "拖动P时E始终由关于AD的反射生成，G、H由对应直线或射线求交，不得手拖E、G、H破坏构造"
+      ]
+    },
+    {
+      "id": "2①",
+      "kind": "geometry",
+      "final_answer": {"value": "∠APB=105°", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "由△ABP≌△ADP及沿DP折叠得∠APB=∠APD=∠FPD",
+        "折叠保持∠DFP=∠DAP=45°；DF∥BP给出∠BPF=45°",
+        "点P周角为∠APB+∠APD+∠FPD+∠BPF=360°，故3∠APB+45°=360°"
+      ],
+      "obligations": {
+        "domain": ["P在对角线AC线段上且采用图2的非退化位置，F由A关于DP反射得到"],
+        "cases": ["周角各角的排列必须对应图2，不可把∠BPF误算入三角形内角和"],
+        "endpoints": ["P在A、C等退化端点时不能直接套用本构形的角度链"]
+      },
+      "diagram_requirements": [
+        "在图1基础上加入F为A关于DP的对称点，并满足DF∥BP",
+        "标注∠APB、∠APD、∠FPD相等及DF与BP平行"
+      ],
+      "interaction_requirements": [
+        "P仅可沿AC线段调整，F必须由DP反射联动；平行条件用于筛选构形而非允许任意拖动F"
+      ]
+    },
+    {
+      "id": "2②",
+      "kind": "geometry",
+      "final_answer": {"value": "△EFD是等腰直角三角形，FE=FD且∠EFD=90°", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "P在CA延长线上，∠PAD=135°；沿AD折叠得∠EAD=135°，故∠PAE=90°",
+        "由全等和折叠有AP=AE=PF，且∠APB=∠APD=∠FPD",
+        "PF⊥BP给出三个相等角之和为90°，所以各为30°，∠APF=60°，△APF为等边三角形",
+        "算得∠EDA=∠ADP=∠FDP=15°，故∠EDF=45°",
+        "AF=AP=AE且∠EAF=150°，等腰△AEF的底角为15°，从而∠FED=15°+30°=45°",
+        "△EFD两底角均45°，所以FE=FD且顶角∠EFD=90°"
+      ],
+      "obligations": {
+        "domain": ["P必须在CA越过A的延长线上，而非AC线段或AC越过C的延长线"],
+        "cases": ["使用图3的射线与角度排列；两次折叠的对应点分别为P→E和A→F，不能互换"],
+        "endpoints": ["P=A会导致折叠和角度关系退化，不属于本证明使用的构形"]
+      },
+      "diagram_requirements": [
+        "P位于CA越过A的延长线，E、F分别由两次折叠生成，PF⊥BP",
+        "连接EF并体现FE=FD、∠EFD=90°的待证关系，不能以绘图测量代替证明"
+      ],
+      "interaction_requirements": [
+        "P沿指定延长线运动时保持E、F的反射构造；仅显示满足PF⊥BP的有效位置并保留垂直约束检查"
+      ]
+    },
+    {
+      "id": "2③",
+      "kind": "geometry",
+      "final_answer": {"value": "AP=3√2+√6或3√2-√6", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "设M=AC∩BD，则AM=BM=DM=3√2，且AC⊥BD",
+        "B、P、F共线时，由(1)BH⊥DE及折叠角关系可得Rt△DFH为等腰直角三角形，HD=HF=3√2",
+        "在Rt△BDH中BD=6√2，故BH=√(72-18)=3√6",
+        "折叠及对称给出BP=DP、PH=PM；设PH=x，则(3√6-x)^2=(3√2)^2+x^2，解得x=√6",
+        "P位于M两侧分别对应AP=AM+PM与AP=AM-PM，两个值均为正且落在线段AC内"
+      ],
+      "obligations": {
+        "domain": ["P限制在对角线AC线段上，两个候选值都须回代检查0<AP<6√2"],
+        "cases": ["B、P、F共线包含P在M两侧的两种图序，必须分别取AP=AM±PM，不能漏解"],
+        "endpoints": ["线段长度取正；BH、BP中的加减由对应图序决定，不用未经说明的绝对值"]
+      },
+      "diagram_requirements": [
+        "分别保留P在M两侧的两种合法构形，M为AC与BD交点，B、P、F共线",
+        "两种构形均保持两次折叠、H为BP与DE交点及相应垂直关系"
+      ],
+      "interaction_requirements": [
+        "沿AC拖动P时联动E、F、G、H，并分别呈现满足B、P、F共线的两个位置，不得合并或漏掉任一解"
+      ]
+    }
+  ],
+  "independent_recheck": "第(1)问另用A(0,0)、B(0,-6)、D(6,0)、P(t,-t)的坐标点积验证垂直；其余各问重新从正方形对角线、两次反射的等长等角性质推导，重点核对图2周角、图3延长线位置和第③问M两侧两种图序。结论与参考答案一致，但仍待用户人工确认。",
+  "reference_issues": []
+}

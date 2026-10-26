@@ -1,0 +1,86 @@
+{
+  "schema_version": "gold-v1",
+  "case_id": "05",
+  "question_image": {
+    "path": "tests/test-items/05.png",
+    "sha256": "a6fc996c3d61eda6ac5ec3f4cfe7f4aec833abdcf73c0763a5665326a87d001f"
+  },
+  "answer_image": {
+    "path": "tests/test-items/05答案.png",
+    "sha256": "75a391282d614c1423c2cae8112cb1984b1d37d19adab65c6059db04a73beefe"
+  },
+  "verification_status": "ai_checked_pending_human",
+  "subquestions": [
+    {
+      "id": "1①",
+      "kind": "function",
+      "final_answer": {"value": "是；y1=-x+6经过A(5,1)、B(1,5)，DX值h=2", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "C(1,1)，AC⊥BC、BC∥y轴且AC=BC=4，按图得两锐角顶点A(5,1)、B(1,5)",
+        "A、B均满足y=-x+6，所以该一次函数是题设“勾股函数”",
+        "在1≤x≤5上函数递减，ymax=y(1)=5、ymin=y(5)=1",
+        "h=(ymax-ymin)/2=(5-1)/2=2"
+      ],
+      "obligations": {
+        "domain": ["DX的x区间由两锐角顶点横坐标确定为[1,5]，不是整个实数域"],
+        "cases": ["按题图A在C右、B在C上确定坐标，不能任意交换成其他四个方向"],
+        "endpoints": ["闭区间两端均参与最值；一次函数递减使最大值在x=1、最小值在x=5"]
+      },
+      "diagram_requirements": [
+        "直角等腰三角形两锐角顶点为A(5,1)、B(1,5)，直线y=-x+6经过二者"
+      ],
+      "interaction_requirements": []
+    },
+    {
+      "id": "1②",
+      "kind": "function",
+      "final_answer": {"value": "存在；k=5，即y2=5/x", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "若y=k/x经过A(5,1)，则k=5×1=5",
+        "同一k在B(1,5)处也给k=1×5=5，故两点落在同一反比例函数上",
+        "k=5≠0，符合反比例函数条件"
+      ],
+      "obligations": {
+        "domain": ["反比例函数定义域x≠0，A、B横坐标5和1均有效"],
+        "cases": ["两个点必须给同一个k，而非分别构造两个函数"],
+        "endpoints": ["k≠0已验证；本问未要求计算反比例函数的DX值，不应额外添加"]
+      },
+      "diagram_requirements": [
+        "反比例曲线y=5/x的第一象限分支经过A(5,1)与B(1,5)"
+      ],
+      "interaction_requirements": []
+    },
+    {
+      "id": "2",
+      "kind": "function",
+      "final_answer": {"value": "m=4、-4-4√2或6-3√2", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "由A(2,2)、B(1,m)、C(1,2)及二次函数过A、B得b=-m-1、c=2m，故y3=x^2-(m+1)x+2m",
+        "对称轴x=(m+1)/2，顶点纵坐标v=(-m^2+6m-1)/4，DX区间恒为[1,2]",
+        "m=2时B=C，不能构成直角三角形，必须排除",
+        "当m≥3时最大值为m、最小值为2，h=(m-2)/2；方程m^2/16=(m-2)/2给m=4（重根），符合m≥3",
+        "当2<m<3时最大值为m、最小值为v，h=(m-1)^2/8；方程m^2/16=(m-1)^2/8的根2±√2均不在(2,3)，舍去",
+        "当m≤1时最大值为2、最小值为m，h=(2-m)/2；方程给m=-4±4√2，仅-4-4√2符合m≤1",
+        "当1<m<2时最大值为2、最小值为v，h=(m-3)^2/8；方程给m=6±3√2，仅6-3√2符合(1,2)",
+        "边界m=1、3已包含在相应单调支检查且不满足方程，m=2因三角形退化排除"
+      ],
+      "obligations": {
+        "domain": ["Rt△ABC要求A、B、C互异且BC≠0，因此m≠2；二次函数与DX最值只在闭区间[1,2]考察"],
+        "cases": ["以对称轴相对[1,2]的位置及B在C上/下方分m≥3、2<m<3、m≤1、1<m<2四类，m=2单独排除"],
+        "endpoints": ["每个代数根必须回代所属区间；m=1、3按单调支端点检查，m=2不得因任何公式极限而补入答案"]
+      },
+      "diagram_requirements": [
+        "A(2,2)、B(1,m)、C(1,2)，抛物线经过A、B；只比较[1,2]上的端点和顶点",
+        "三个候选m分别呈现正确的最大值、最小值位置，m=2不得绘制为合法三角形"
+      ],
+      "interaction_requirements": []
+    }
+  ],
+  "independent_recheck": "先由A、B坐标重求抛物线和顶点，再以DX区间[1,2]内的端点与顶点独立分类。逐支建立h=(ymax-ymin)/2并回代根，另检查m=1,2,3边界；得到4、-4-4√2、6-3√2。未把参考图中的根直接当作结论，候选仍待用户人工确认。",
+  "reference_issues": [
+    {
+      "issue": "第(2)问1<m<2分支中，参考图先给h=[2-(-m^2+6m-1)/4]/2，但紧接着一行漏写了最外层的除以2；若照该行计算不会得到图中所列根。",
+      "resolution": "按DX定义保留h=(2-v)/2=(m-3)^2/8，独立解得6±3√2并仅保留6-3√2；参考后续根与正确公式一致，将中间行视为排版漏项。"
+    }
+  ]
+}

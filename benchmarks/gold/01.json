@@ -1,0 +1,110 @@
+{
+  "schema_version": "gold-v1",
+  "case_id": "01",
+  "question_image": {
+    "path": "tests/test-items/01.png",
+    "sha256": "90e8949eb939c196658d6f1f18d336687035ea06d54cf83f0ee0d176a0aea97c"
+  },
+  "answer_image": {
+    "path": "tests/test-items/01答案.png",
+    "sha256": "8e9625603577d76d54892c44b10bbf3aa867789acf9b338de73e97e8d192c623"
+  },
+  "verification_status": "ai_checked_pending_human",
+  "subquestions": [
+    {
+      "id": "1",
+      "kind": "function",
+      "final_answer": {"value": "Q(3,-3)", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "过P(-1,1)的正比例函数为y=-x",
+        "4进点横坐标增加4且仍在y=-x上，因此Q的横坐标为3、纵坐标为-3"
+      ],
+      "obligations": {
+        "domain": ["P不是原点，正比例函数斜率可唯一确定"],
+        "cases": ["无需分类；使用题设k=4且k>0"],
+        "endpoints": ["横坐标之差按B在A右侧解释为x_Q-x_P=4，不取绝对值的其他方向"]
+      },
+      "diagram_requirements": [],
+      "interaction_requirements": []
+    },
+    {
+      "id": "2①",
+      "kind": "function",
+      "final_answer": {"value": "y1=x^2+2x", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "D(3,3)确定过C、D的正比例函数为y=x",
+        "D是C的4进点，所以x_C=3-4=-1，进而C(-1,-1)",
+        "将C代入x^2+bx得1-b=-1，所以b=2"
+      ],
+      "obligations": {
+        "domain": ["C不是原点；求得的C(-1,-1)满足该限制"],
+        "cases": ["由D唯一反推C，无第二个方向或第二个b值"],
+        "endpoints": ["4进点位移固定为x_D-x_C=4"]
+      },
+      "diagram_requirements": [],
+      "interaction_requirements": []
+    },
+    {
+      "id": "2②",
+      "kind": "function",
+      "final_answer": {"value": "N(m+6,m^2+8m+12)，其中m≠0", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "M(m,m^2+2m)且m≠0，过M的正比例函数斜率为(m^2+2m)/m=m+2",
+        "N的横坐标为m+6，代入y=(m+2)x得纵坐标(m+2)(m+6)=m^2+8m+12"
+      ],
+      "obligations": {
+        "domain": ["必须保留m≠0，除以m求正比例函数斜率才合法"],
+        "cases": ["m+2=0时过M的直线为y=0，公式仍有效，无需另删该情形"],
+        "endpoints": ["N在M右侧且横坐标差为6"]
+      },
+      "diagram_requirements": [],
+      "interaction_requirements": []
+    },
+    {
+      "id": "2③",
+      "kind": "function",
+      "final_answer": {"value": "y2=x^2-4x", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "令N的横坐标x=m+6，则m=x-6",
+        "将m=x-6代入m^2+8m+12并化简得y2=x^2-4x",
+        "m≠0对应x≠6；按题设所给y2表达式的通常约定写抛物线表达式，若追踪严格点集定义域须另注x≠6"
+      ],
+      "obligations": {
+        "domain": ["M的定义要求m≠0；严格由动点生成的点集不含x=6处点(6,12)，题目所求函数表达式按参考口径给整抛物线"],
+        "cases": ["代换x=m+6在实数范围一一对应，无分类遗漏"],
+        "endpoints": ["不得把m≠0误写成x≠0；排除的是x=6而非y2的零点"]
+      },
+      "diagram_requirements": [],
+      "interaction_requirements": []
+    },
+    {
+      "id": "3",
+      "kind": "function",
+      "final_answer": {"value": "p=0或p=-25/16", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "y3在x≤0时为x^2+2x，在x>0时为x^2-4x；原点只属于左段",
+        "左段交点满足x^2+(5/2)x-p=0且x≤0，右段交点满足x^2-(7/2)x-p=0且x>0",
+        "p=0时左段交点为x=-5/2,0，右段仅有x=7/2，合计3个",
+        "p=-25/16时左段在x=-5/4相切计1个，右段两根x=(7±2√6)/4均大于0，合计3个",
+        "按判别式、根符号及分段定义域检查其他p，未再产生恰好3个交点的情形"
+      ],
+      "obligations": {
+        "domain": ["左方程只接受x≤0的根，右方程只接受x>0的根，不能先按整抛物线计数"],
+        "cases": ["分别检查左段2根右段1根、左段1根右段2根以及相切、过原点情形"],
+        "endpoints": ["原点只计一次；p=0时右段的x=0根必须排除；相切重根按一个公共点计数"]
+      },
+      "diagram_requirements": [
+        "分段抛物线必须在x=0处连续且原点只绘制一次，并标出左、右两段",
+        "两条候选直线分别为y=-x/2和y=-x/2-25/16，应交点数与解析一致"
+      ],
+      "interaction_requirements": []
+    }
+  ],
+  "independent_recheck": "由进点定义重新建立坐标平移和正比例函数关系，未直接沿用答案图代数。第(3)问分别对两个二次方程施加x≤0与x>0限制，并逐一核算p=0、p=-25/16及判别式边界。候选结论仍需用户人工确认。",
+  "reference_issues": [
+    {
+      "issue": "第(3)问参考解析只展示过原点和左支相切两种图形，未在答案图中完整列出其他参数范围的排除过程。",
+      "resolution": "候选金标把两支有效根数、根符号、原点归属和相切计数列为强制检查点；独立复算后的两个p值与参考结论一致。"
+    }
+  ]
+}

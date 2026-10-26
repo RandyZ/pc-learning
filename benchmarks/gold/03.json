@@ -1,0 +1,102 @@
+{
+  "schema_version": "gold-v1",
+  "case_id": "03",
+  "question_image": {
+    "path": "tests/test-items/03.png",
+    "sha256": "df0b2d7fb98f17869ae8e873a4cc96a63f9bb2ac939a6258dc1647ba77771083"
+  },
+  "answer_image": {
+    "path": "tests/test-items/03答案.png",
+    "sha256": "09bef25af7a862e263c376124990032a7fbedab51d09cc2bc388ca82b9bbfd82"
+  },
+  "verification_status": "ai_checked_pending_human",
+  "subquestions": [
+    {
+      "id": "1",
+      "kind": "function",
+      "final_answer": {"value": "M'(-2,1)", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "关于Q(0,1)旋转180°即中心对称，坐标映射为(x,y)→(-x,2-y)",
+        "代入M(2,1)得M'(-2,1)"
+      ],
+      "obligations": {
+        "domain": ["直接使用题给q=1和M(2,1)，无额外定义域限制"],
+        "cases": ["中心对称只有一个对应点，无方向分类"],
+        "endpoints": ["旋转180°不是关于x轴或y轴反射，纵坐标应计算2q-y"]
+      },
+      "diagram_requirements": [],
+      "interaction_requirements": []
+    },
+    {
+      "id": "2",
+      "kind": "function",
+      "final_answer": {"value": "a=-6", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "P(a,3)关于Q(0,2)的对称关联点为P'(-a,1)",
+        "P'在y=6/x上，所以1=6/(-a)，解得a=-6",
+        "回代得P'(6,1)，满足6/6=1"
+      ],
+      "obligations": {
+        "domain": ["反比例函数要求P'横坐标-a≠0；a=-6满足"],
+        "cases": ["代入后一一次方程只有一解，无其他分支"],
+        "endpoints": ["不得把P(a,3)而非P'代入反比例函数"]
+      },
+      "diagram_requirements": [],
+      "interaction_requirements": []
+    },
+    {
+      "id": "3①",
+      "kind": "function",
+      "final_answer": {"value": "m=5/2或11/2", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "y1=(x-2)^2+m-4(x≥0)的顶点A(2,m-4)",
+        "关于原点中心对称后顶点B(-2,4-m)",
+        "AB^2=4^2+[2(m-4)]^2=25，所以[2(m-4)]^2=9",
+        "解2m-8=±3得m=11/2或5/2"
+      ],
+      "obligations": {
+        "domain": ["y1仅取x≥0，但其顶点横坐标2在定义域内；y2对应x≤0"],
+        "cases": ["平方方程的两个符号分支都保留"],
+        "endpoints": ["AB使用非负距离，两个m值均使AB=5，无额外舍根"]
+      },
+      "diagram_requirements": [
+        "右半抛物线y1与左半抛物线y2关于原点中心对称，顶点分别为A、B"
+      ],
+      "interaction_requirements": []
+    },
+    {
+      "id": "3②",
+      "kind": "function",
+      "final_answer": {"value": "-1≤m<1或3<m≤5，即[-1,1)∪(3,5]", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "M(-2,1)关于(0,1)的关联点为N(2,1)，线段MN为y=1且-2≤x≤2",
+        "y1=x^2-4x+m仅取x≥0；y2=-(x+2)^2+4-m仅取x≤0，不能把任一支扩展到整个实数域",
+        "右支令y1=1得x=2±√(5-m)；在线段及x≥0内，当且仅当1≤m≤5恰有1个交点，其中m=5为x=2处端点相切",
+        "左支令y2=1得x=-2±√(3-m)；在线段及x≤0内，当且仅当-1≤m≤3恰有1个交点，其中m=3为x=-2处端点相切",
+        "m=1时右支x=0与左支x=-2+√2各给一个交点，合计2个，故排除；m=3时x=0与x=-2各一个，合计2个，故排除",
+        "m=-1仅左支x=0一个，m=5仅右支x=2一个，两个端点均包含；其余参数按上述有效根数恰为1当且仅当-1≤m<1或3<m≤5"
+      ],
+      "obligations": {
+        "domain": ["根必须同时满足各自半支定义域和-2≤x≤2；y1的x≥0、y2的x≤0不可省略"],
+        "cases": ["分别计算左、右支在线段上的交点数再相加；不能把重根计作两个公共点，也不能漏掉端点相切"],
+        "endpoints": ["包含m=-1和m=5，排除m=1和m=3；x=±2属于线段，x=0可同时属于两支定义域但本题为同一y值时两支不会在该处重合"]
+      },
+      "diagram_requirements": [
+        "绘制右半支y1(x≥0)、左半支y2(x≤0)及闭线段MN(y=1,-2≤x≤2)",
+        "边界示例应区分m=-1,m=1,m=3,m=5的交点个数，端点M、N必须包含"
+      ],
+      "interaction_requirements": []
+    }
+  ],
+  "independent_recheck": "未采用答案图中的不等式组，而是分别求y1=1与y2=1的根并施加半支定义域和线段范围。独立得到有效根数：右支在1≤m≤5为1，左支在-1≤m≤3为1，相加后得到[-1,1)∪(3,5]。逐一回查m=-1,1,3,5及相切情形。答案图内部范围冲突已记录，最终候选仍待用户人工确认。",
+  "reference_issues": [
+    {
+      "issue": "第(3)问开头先写“-1≤m<1或3<m≤5”，第②问开头却写“-13≤m≤-11或3≤m≤5”，且第②问末尾又写“-1≤m<1或3<m≤5”；三处范围并不一致。",
+      "resolution": "不照抄任一范围，按两支有效根数独立复算。结果支持第(3)问开头和第②问末尾的[-1,1)∪(3,5]，不支持第②问开头的[-13,-11]∪[3,5]；m=1,3必须排除，m=-1,5必须包含。"
+    },
+    {
+      "issue": "第②问参考解析所列不等式组没有充分展示分段定义域、所有根及端点相切的完整计数论证。",
+      "resolution": "候选金标改用根x=2±√(5-m)和x=-2±√(3-m)的有效区间计数，并把m=-1,1,3,5列为强制人工检查点。"
+    }
+  ]
+}

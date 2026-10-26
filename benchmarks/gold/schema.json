@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://math-agent.local/benchmarks/gold/schema.json",
+  "title": "Candidate gold case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "question_image",
+    "answer_image",
+    "verification_status",
+    "subquestions",
+    "independent_recheck",
+    "reference_issues"
+  ],
+  "properties": {
+    "schema_version": {"const": "gold-v1"},
+    "case_id": {"type": "string", "pattern": "^0[1-5]$"},
+    "question_image": {"$ref": "#/$defs/image"},
+    "answer_image": {"$ref": "#/$defs/image"},
+    "verification_status": {"const": "ai_checked_pending_human"},
+    "subquestions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/subquestion"}
+    },
+    "independent_recheck": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "reference_issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["issue", "resolution"],
+        "properties": {
+          "issue": {"type": "string", "minLength": 1, "pattern": "\\S"},
+          "resolution": {"type": "string", "minLength": 1, "pattern": "\\S"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonemptyStrings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1, "pattern": "\\S"},
+      "uniqueItems": true
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^tests/test-items/0[1-5](答案)?\\.png$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "subquestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "final_answer",
+        "proof_checkpoints",
+        "obligations",
+        "diagram_requirements",
+        "interaction_requirements"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[123](①|②|③)?$"},
+        "kind": {"enum": ["geometry", "function", "algebra"]},
+        "final_answer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "status", "review_notes"],
+          "properties": {
+            "value": {"type": "string", "pattern": "\\S"},
+            "status": {"enum": ["ai_checked_pending_human", "needs_review"]},
+            "review_notes": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1, "pattern": "\\S"},
+              "uniqueItems": true
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {"status": {"const": "needs_review"}},
+                "required": ["status"]
+              },
+              "then": {
+                "properties": {"review_notes": {"minItems": 1}}
+              }
+            }
+          ]
+        },
+        "proof_checkpoints": {"$ref": "#/$defs/nonemptyStrings"},
+        "obligations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["domain", "cases", "endpoints"],
+          "properties": {
+            "domain": {"$ref": "#/$defs/nonemptyStrings"},
+            "cases": {"$ref": "#/$defs/nonemptyStrings"},
+            "endpoints": {"$ref": "#/$defs/nonemptyStrings"}
+          }
+        },
+        "diagram_requirements": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "pattern": "\\S"},
+          "uniqueItems": true
+        },
+        "interaction_requirements": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "pattern": "\\S"},
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"kind": {"const": "geometry"}},
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "diagram_requirements": {"minItems": 1},
+              "interaction_requirements": {"minItems": 1}
+            }
+          },
+          "else": {
+            "properties": {
+              "interaction_requirements": {"maxItems": 0}
+            }
+          }
+        }
+      ]
+    }
+  }
+}
