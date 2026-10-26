@@ -1,0 +1,88 @@
+{
+  "schema_version": "gold-v1",
+  "case_id": "04",
+  "question_image": {
+    "path": "tests/test-items/04.png",
+    "sha256": "de89bcfc3f01c72f66a5cbc261d6fe662a31c501b77ea398f75851616cc074d7"
+  },
+  "answer_image": {
+    "path": "tests/test-items/04答案.png",
+    "sha256": "d53bffd6caf32ce32a6a49bae3d98870ed8b7bb8f1d29e078bd12a5c380ba31b"
+  },
+  "verification_status": "ai_checked_pending_human",
+  "subquestions": [
+    {
+      "id": "1",
+      "kind": "geometry",
+      "final_answer": {"value": "△ACE∽△ABD", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "绕A旋转使C→E、B→D，所以AC=AE、AB=AD且∠CAB=∠EAD",
+        "由等角减去公共部分得∠CAE=∠BAD",
+        "AC/AB=AE/AD，结合夹角相等，由两边对应成比例且夹角相等得△ACE∽△ABD"
+      ],
+      "obligations": {
+        "domain": ["原三角形非退化且∠ACB=90°，旋转中心A固定，对应关系必须为C→E、B→D"],
+        "cases": ["相似顶点顺序固定为ACE↔ABD，不能由全等误写成任意顶点对应"],
+        "endpoints": ["旋转角为0等退化情形不产生题图所示证明构形，不能仅靠图形目测相似"]
+      },
+      "diagram_requirements": [
+        "△ADE必须由△ABC绕A旋转生成，保留AC=AE、AB=AD及对应角",
+        "连接BD、CE并标明原直角∠ACB=90°"
+      ],
+      "interaction_requirements": [
+        "改变旋转角时D、E由同一旋转联动，不得独立拖动；持续显示BD、CE及对应相似关系"
+      ]
+    },
+    {
+      "id": "2①",
+      "kind": "geometry",
+      "final_answer": {"value": "CE=7.2=36/5", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "AC=6、BC=8且∠ACB=90°，所以AB=10",
+        "直角三角形斜边中点F满足CF=AF=BF=5，故∠ACF=∠CAB",
+        "旋转得AE=AC=6；作AH⊥CE，则H为等腰△ACE底边CE的中点",
+        "cos∠CAB=AC/AB=6/10，cos∠ACF=CH/AC=CH/6，所以CH=18/5",
+        "CE=2CH=36/5=7.2"
+      ],
+      "obligations": {
+        "domain": ["F为斜边AB中点且C、F、E共线；AH为到直线CE的垂线"],
+        "cases": ["使用图2中C-F-E的线段顺序，CE=CF+FE的直观长度不能替代等腰三角形计算"],
+        "endpoints": ["CE取正长度；H为底边中点来自AC=AE，不可未证明就假设H与F重合"]
+      },
+      "diagram_requirements": [
+        "保留6-8-10直角三角形、AB中点F及C、F、E共线",
+        "辅助线AH⊥CE，H为CE中点，D、E仍由旋转生成"
+      ],
+      "interaction_requirements": [
+        "调整构形时F固定为AB中点，旋转后的E与C、F共线作为约束；AH和H由垂足构造联动"
+      ]
+    },
+    {
+      "id": "2②",
+      "kind": "geometry",
+      "final_answer": {"value": "CE/BD=√6/4，即CE=(√6/4)BD", "status": "ai_checked_pending_human", "review_notes": []},
+      "proof_checkpoints": [
+        "设FG=x，则BG=2x、BF=3x、AB=AD=6x、AG=4x，且直角斜边中点性质给CF=BF=3x",
+        "设∠ACE=α，由AC=AE及CF=BF推得∠CEG=∠ABC=∠ADG",
+        "结合对顶角得△EFG∽△DAG，所以EF/AD=FG/AG，进而EF=(x/(4x))·6x=3x/2",
+        "CE=CF+EF=9x/2；等腰△ACE中CH=CE/2=9x/4",
+        "由AC/AB=CH/AC得AC^2=AB·CH=6x·9x/4，取正值得AC=3√6x/2",
+        "由(1)△ACE∽△ABD得CE/BD=AC/AB=(3√6x/2)/(6x)=√6/4"
+      ],
+      "obligations": {
+        "domain": ["G是延长DE与AB的交点，x=FG>0，且采用图3中A-F-G-B的顺序"],
+        "cases": ["BG=2FG只给长度比，图序用于确定BF=3x和AG=4x，不能改写成其他有向线段组合"],
+        "endpoints": ["AC由平方根取正值；相似比使用对应边CE↔BD、AC↔AB，不取倒数"]
+      },
+      "diagram_requirements": [
+        "在CE经过AB中点F的基础上，G为DE延长线与AB交点并满足BG=2FG",
+        "辅助线AH⊥CE，保留旋转对应关系及用于证明的相似三角形EFG、DAG"
+      ],
+      "interaction_requirements": [
+        "旋转与交点G保持联动，BG=2FG作为筛选约束；不得通过独立拖动G或E伪造比例"
+      ]
+    }
+  ],
+  "independent_recheck": "从旋转的等长、等角条件重新建立两组相似；第①问用直角三角形斜边中线及等腰三角形底边一半复算CE，第②问按图3有向图序重推EF、CE、AC及CE/BD，并核对根式化简。结论与参考答案一致，但仍待用户人工确认。",
+  "reference_issues": []
+}
